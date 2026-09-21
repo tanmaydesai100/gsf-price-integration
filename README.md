@@ -64,6 +64,12 @@ php artisan gsf:price P44PYN Wipers --brand=BOSCH
 
 Unlike the Python script, it logs in **once** and caches the cookie for 14 days.
 
+**`nodejs/`** — the same thing again in Node, if the backend it goes into turns
+out to be Node rather than Laravel. Runs on its own: `cd nodejs && npm install
+&& npm test`. See `nodejs/README.md`.
+
+The three folders are independent. None of them calls the others.
+
 ---
 
 ## Things to know
