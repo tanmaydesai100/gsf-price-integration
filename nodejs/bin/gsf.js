@@ -26,7 +26,9 @@ GSF TradeHub trade-price lookup (read-only)
 
   gsf price <reg> [category]    Look up a price          (category default: Wipers)
       --brand=BOSCH             Preferred brand
-      --fitment=Front           Front, Rear, or "any"
+      --fitment="Front Axle"    Filter by fitment (default: all).
+                                Varies by category: Front/Rear for wipers,
+                                "Front Axle"/"Rear Axle" for brakes.
       --prefer=availability     availability (default) or price
       --all                     List every candidate instead of picking one
       --whoami                  Show the current GSF session
@@ -40,7 +42,7 @@ GSF TradeHub trade-price lookup (read-only)
 
 const options = {
   brand: { type: 'string' },
-  fitment: { type: 'string', default: 'Front' },
+  fitment: { type: 'string' },
   prefer: { type: 'string' },
   path: { type: 'string' },
   all: { type: 'boolean', default: false },
@@ -73,7 +75,9 @@ async function price(args, values) {
     return 1;
   }
 
-  const fitment = values.fitment === 'any' ? null : values.fitment;
+  // Unset or 'any' means every fitment: the labels differ per category, so
+  // a hardcoded default silently returned nothing for brakes and filters.
+  const fitment = values.fitment && values.fitment !== 'any' ? values.fitment : null;
   const prices = new GsfPriceService(client);
 
   if (values.all) {

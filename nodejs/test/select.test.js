@@ -78,3 +78,46 @@ test('reports not-found without throwing when nothing is quotable', () => {
   assert.equal(r.found, false);
   assert.equal(r.needsReview, true);
 });
+
+test('GroupTomorrow outranks Group72Hours', () => {
+  // Wipers came back Immediate/OutOfStock only, so this value never appeared
+  // in the fixture - and an unranked value sorts LAST, putting a next-day
+  // part behind a three-day one. Live brake discs on P44PYN return it.
+  const part = (sku, availability) => ({
+    sku,
+    brand: 'X',
+    availability,
+    customerPrice: 100,
+    groupedPartNumber: 'G1',
+    fitment: null,
+  });
+
+  const r = select(
+    { partData: { parts: [part('SLOW-3DAY', 'Group72Hours'), part('NEXT-DAY', 'GroupTomorrow')] } },
+    null,
+    null,
+    'availability',
+  );
+
+  assert.equal(r.sku, 'NEXT-DAY');
+});
+
+test('an unrecognised availability value still sorts last', () => {
+  const part = (sku, availability) => ({
+    sku,
+    brand: 'X',
+    availability,
+    customerPrice: 100,
+    groupedPartNumber: 'G1',
+    fitment: null,
+  });
+
+  const r = select(
+    { partData: { parts: [part('MYSTERY', 'SomethingNew'), part('KNOWN', 'Group72Hours')] } },
+    null,
+    null,
+    'availability',
+  );
+
+  assert.equal(r.sku, 'KNOWN');
+});

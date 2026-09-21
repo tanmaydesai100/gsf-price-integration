@@ -57,7 +57,7 @@ Needs `express` installed; it is not a dependency of this package.
 npm test
 ```
 
-Nine tests over the selection rules, run against a fixture — no network. They
+Eleven tests over the selection rules, run against a fixture — no network. They
 pin the behaviour that costs money if it drifts: unpriced and out-of-stock
 parts are never quoted, alternatives stay inside one fitment group, and
 multiple fitment groups set `needsReview`.

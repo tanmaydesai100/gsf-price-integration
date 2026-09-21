@@ -16,7 +16,8 @@ import { config } from './config.js';
 const AVAILABILITY_RANK = {
   Immediate: 0, // on the shelf at our branch
   HubTomorrow: 1, // next day from a regional hub
-  Group72Hours: 2, // ~3 days from the wider group
+  GroupTomorrow: 2, // next day from the wider group
+  Group72Hours: 3, // ~3 days from the wider group
 };
 
 const normaliseReg = (reg) => String(reg).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -31,10 +32,13 @@ export class GsfPriceService {
    * @param {string}  reg       e.g. "P44PYN"
    * @param {string}  category  e.g. "Wipers"
    * @param {?string} brand     e.g. "BOSCH" - preference, not a filter
-   * @param {?string} fitment   "Front", "Rear", or null for both
+   * @param {?string} fitment   catalogue fitment label, or null for all.
+   *                            The vocabulary varies by category: Front/Rear
+   *                            for wipers, "Front Axle"/"Rear Axle" for
+   *                            brakes, "N/A" for filters. Null is safest.
    * @param {?string} prefer    "availability" (default) or "price"
    */
-  async getPartPrice(reg, category, brand = null, fitment = 'Front', prefer = null) {
+  async getPartPrice(reg, category, brand = null, fitment = null, prefer = null) {
     const registration = normaliseReg(reg);
     const componentId = await this.categories.componentId(category);
     const payload = await this.#fetch(registration, category, componentId);

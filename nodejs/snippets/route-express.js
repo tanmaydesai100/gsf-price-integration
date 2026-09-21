@@ -36,8 +36,10 @@ router.post('/part-price', express.json(), async (req, res) => {
   if (brand && (typeof brand !== 'string' || brand.length > 40)) {
     errors.push('brand must be a string (max 40 chars)');
   }
-  if (fitment && !['Front', 'Rear'].includes(fitment)) {
-    errors.push('fitment must be Front or Rear');
+  // Not an enum: the catalogue's fitment labels vary by category
+  // (Front/Rear, "Front Axle"/"Rear Axle", "N/A"). Omit for all fitments.
+  if (fitment && (typeof fitment !== 'string' || fitment.length > 40)) {
+    errors.push('fitment must be a string (max 40 chars)');
   }
   if (prefer && !['availability', 'price'].includes(prefer)) {
     errors.push('prefer must be availability or price');
@@ -51,7 +53,7 @@ router.post('/part-price', express.json(), async (req, res) => {
       registration,
       category,
       brand ?? null,
-      fitment ?? 'Front',
+      fitment ?? null,
       prefer ?? null,
     );
 
