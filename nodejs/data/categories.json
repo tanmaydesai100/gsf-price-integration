@@ -1,0 +1,10 @@
+{
+    "_generated": null,
+    "_source": "https://trade.gsfcarparts.com/api/menus",
+    "_note": "SEED FILE — contains only the componentIds verified during the investigation. Run `php artisan gsf:categories --export` on the production server to replace this with the full map (~1,300 entries), then commit it.",
+    "categories": {
+        "wipers": 867,
+        "wiper arm": 901,
+        "wiper motor": 924
+    }
+}

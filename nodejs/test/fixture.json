@@ -1,0 +1,27 @@
+{
+  "vehicle": { "vrm": "P44PYN", "vin": "WVWZZZ1KZ8W123456", "make": "VOLKSWAGEN", "model": "GOLF" },
+  "partTypeDecoded": "Wipers",
+  "partData": { "parts": [
+    { "sku": "BOSAR550S", "brand": "BOSCH", "description": "Aerotwin 550/530mm", "fitment": "Front",
+      "groupedPartNumber": "550/530", "customerPrice": 20.90, "retailPrice": 41.99, "taxRate": 0.2,
+      "availability": "Immediate", "componentId": 867, "localStock": 4, "hubStock": 12, "companyStock": 80 },
+    { "sku": "BOSA113S", "brand": "BOSCH", "description": "Aerotwin 600/500mm", "fitment": "Front",
+      "groupedPartNumber": "600/500", "customerPrice": 26.02, "retailPrice": 52.99, "taxRate": 0.2,
+      "availability": "Immediate", "componentId": 867, "localStock": 2, "hubStock": 5, "companyStock": 40 },
+    { "sku": "VAL574660", "brand": "VALEO", "description": "Silencio 550/530mm", "fitment": "Front",
+      "groupedPartNumber": "550/530", "customerPrice": 18.45, "retailPrice": 37.99, "taxRate": 0.2,
+      "availability": "HubTomorrow", "componentId": 867, "localStock": 0, "hubStock": 9, "companyStock": 30 },
+    { "sku": "CHEAPO1", "brand": "GENERIC", "description": "Budget 550/530mm", "fitment": "Front",
+      "groupedPartNumber": "550/530", "customerPrice": 9.99, "retailPrice": 19.99, "taxRate": 0.2,
+      "availability": "Group72Hours", "componentId": 867, "localStock": 0, "hubStock": 0, "companyStock": 6 },
+    { "sku": "NOPRICE1", "brand": "BOSCH", "description": "Not sold to us", "fitment": "Front",
+      "groupedPartNumber": "550/530", "customerPrice": null, "retailPrice": 44.00, "taxRate": 0.2,
+      "availability": "Immediate", "componentId": 867 },
+    { "sku": "OOS1", "brand": "BOSCH", "description": "Out of stock", "fitment": "Front",
+      "groupedPartNumber": "550/530", "customerPrice": 15.00, "retailPrice": 30.00, "taxRate": 0.2,
+      "availability": "OutOfStock", "componentId": 867 },
+    { "sku": "REAR1", "brand": "BOSCH", "description": "Rear blade", "fitment": "Rear",
+      "groupedPartNumber": "R330", "customerPrice": 11.00, "retailPrice": 22.00, "taxRate": 0.2,
+      "availability": "Immediate", "componentId": 867 }
+  ]}
+}
