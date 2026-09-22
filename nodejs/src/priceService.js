@@ -60,6 +60,18 @@ export class GsfPriceService {
     return select(payload, brand, fitment, prefer ?? config.prefer);
   }
 
+  /**
+   * Every fitment this vehicle offers in one category, each with its best
+   * part. This is what the picker shows before a line joins a quotation.
+   */
+  async listOptions(reg, category, brand = null, prefer = null) {
+    const registration = normaliseReg(reg);
+    const componentId = await this.categories.componentId(category);
+    const payload = await this.#fetch(registration, category, componentId);
+
+    return { category, ...options(payload, brand, prefer ?? config.prefer) };
+  }
+
   /** Every candidate for the vehicle - useful for an admin/debug screen. */
   async listParts(reg, category, fitment = null) {
     const registration = normaliseReg(reg);
@@ -129,8 +141,7 @@ export function select(payload, brand, fitment, prefer) {
   const rows = fitment ? parts.filter((p) => p.fitment === fitment) : parts;
 
   // A null customerPrice means GSF will not sell it to us at all.
-  const priced = rows.filter((p) => p.customerPrice !== null && p.customerPrice !== undefined);
-  const inStock = priced.filter((p) => p.availability !== 'OutOfStock');
+  const inStock = quotable(rows);
 
   const vehicle = payload?.vehicle ?? {};
 
@@ -234,6 +245,206 @@ export function select(payload, brand, fitment, prefer) {
 
     alternatives,
   };
+}
+
+// ---------------------------------------------------------------- options
+
+/**
+ * Every distinct fitment a vehicle offers in one category, each with its best
+ * part - rather than one pick and a "could not decide" flag.
+ *
+ * There are three dimensions in a parts payload, and the old needsReview flag
+ * mashed them together:
+ *
+ *   position   Front / Rear, Front Axle / Rear Axle, "Inner Front LH/RH"
+ *              - a real choice, carried by `fitment`
+ *   variant    within one position, `groupedPartNumber` separates genuine
+ *              specification differences, NOT just sizes: on P44PYN the front
+ *              wiper splits into plain flat blade, heated spray and water
+ *              spray, which depend on the car's washer equipment
+ *   brand      decided by the priority list, inside one variant
+ *
+ * GSF cannot resolve the variant for us - isBestMatch is false on every part
+ * and bestMatchScore is null - so we surface the variants and a human picks.
+ *
+ * @returns {Array} one entry per position x variant, best-first within position
+ */
+export function options(payload, brand, prefer) {
+  const parts = payload?.partData?.parts ?? [];
+  const inStock = quotable(parts);
+  const vehicle = payload?.vehicle ?? {};
+
+  const groups = new Map();
+  for (const part of inStock) {
+    // Position and variant together identify one real choice. Missing values
+    // still form a group of their own rather than being dropped.
+    const key = `${part.fitment ?? ''} ${part.groupedPartNumber ?? ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(part);
+  }
+
+  const sort = sorter(prefer ?? config.prefer);
+
+  const picked = [...groups.values()].map((members) => {
+    members.sort(sort);
+    return { members, ...pickFrom(members, brand) };
+  });
+
+  const shared = sharedProductName(picked.map((p) => p.chosen));
+
+  const list = picked.map(({ members, chosen, matchedBrand, preferred }) => {
+    return {
+      position: chosen.fitment ?? null,
+      group: chosen.groupedPartNumber ?? null,
+      label: optionLabel(chosen, shared),
+      description: chosen.description ?? null,
+
+      brand: chosen.brand ?? null,
+      sku: chosen.sku ?? null,
+      tradePrice: chosen.customerPrice ?? null,
+      rrp: chosen.retailPrice ?? null,
+      availability: chosen.availability ?? null,
+
+      brandSelected: matchedBrand,
+      brandMatched: preferred.length > 0,
+
+      candidates: members.length,
+      alternatives: members
+        .filter((p) => p.sku !== chosen.sku)
+        .map((p) => ({
+          sku: p.sku,
+          brand: p.brand ?? null,
+          tradePrice: p.customerPrice,
+          availability: p.availability ?? null,
+        })),
+    };
+  });
+
+  // Group the positions together, and inside a position put the best option
+  // first, so the obvious choice is at the top of each heading.
+  list.sort(
+    (a, b) =>
+      String(a.position ?? '').localeCompare(String(b.position ?? '')) ||
+      sort(
+        { availability: a.availability, customerPrice: a.tradePrice },
+        { availability: b.availability, customerPrice: b.tradePrice },
+      ),
+  );
+
+  return {
+    registration: vehicle.vrm ?? null,
+    vehicle: `${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() || null,
+    vin: vehicle.vin ?? null,
+    category: payload?.partTypeDecoded ?? null,
+    positions: [...new Set(list.map((o) => o.position))],
+    options: list,
+  };
+}
+
+/**
+ * The position alone does not identify an option - all five front wiper
+ * variants on P44PYN read "Front". The description is the only field that
+ * separates them, so the label is the position plus whatever the description
+ * adds beyond it.
+ *
+ *   "Wiper Blade - Front; 550mm (22in) / 530mm (21in) - Pair", fitment Front
+ *   -> "Front - 550mm (22in) / 530mm (21in) - Pair"
+ *
+ * partType and genArtDescription are null on every part GSF returns, so the
+ * product name has to come from the description itself.
+ */
+function optionLabel(part, sharedName) {
+  const position = meaningfulPosition(part.fitment);
+  let segments = String(part.description ?? '')
+    .split(/\s+-\s+/)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+  // Drop the product name the whole category shares - it is already the row.
+  if (sharedName && segments.length > 1 && segments[0].toLowerCase() === sharedName.toLowerCase()) {
+    segments = segments.slice(1);
+  }
+
+  // Drop the position wherever the description repeats it, as its own segment
+  // ("- Front -") or leading a semicolon list ("Front; 550mm").
+  if (position) {
+    const wanted = position.toLowerCase();
+    segments = segments
+      .map((segment) =>
+        segment
+          .split(/\s*;\s*/)
+          .filter((piece) => piece.trim().toLowerCase() !== wanted)
+          .join('; ')
+          .trim(),
+      )
+      .filter((segment) => segment && segment.toLowerCase() !== wanted);
+  }
+
+  const rest = segments.join(' - ').trim();
+
+  if (!position) return rest || 'Unspecified fitment';
+  return rest ? `${position} - ${rest}` : position;
+}
+
+/**
+ * The leading description segment most options share, e.g. "Wiper Blade".
+ *
+ * Not unanimity: one VALEO wiper is listed as "FRONT WIPER BLADES" while the
+ * other five start "Wiper Blade", and requiring every option to agree left the
+ * product name on all six. Half the set is enough to call it the shared name,
+ * and options that do not carry it simply keep their own wording.
+ */
+function sharedProductName(parts) {
+  const counts = new Map();
+
+  for (const part of parts) {
+    const name = String(part.description ?? '').split(/\s+-\s+/)[0]?.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    counts.set(key, { name, count: (counts.get(key)?.count ?? 0) + 1 });
+  }
+
+  let best = null;
+  for (const entry of counts.values()) {
+    if (!best || entry.count > best.count) best = entry;
+  }
+
+  return best && best.count * 2 >= parts.length ? best.name : null;
+}
+
+/**
+ * "N/A" and "" are how GSF says a part has no position - a filter fits one
+ * way round. Treating them as a label would put "N/A -" in front of every
+ * filter, so they become no position at all.
+ */
+function meaningfulPosition(fitment) {
+  const value = String(fitment ?? '').trim();
+  return !value || value.toUpperCase() === 'N/A' ? '' : value;
+}
+
+/** Priced, and GSF will actually sell it. Shared by select() and options(). */
+function quotable(parts) {
+  return parts.filter(
+    (p) =>
+      p.customerPrice !== null && p.customerPrice !== undefined && p.availability !== 'OutOfStock',
+  );
+}
+
+/**
+ * Apply the brand priority list to an already-sorted set. The first brand with
+ * anything quotable wins outright - we do not compare across brands on price.
+ */
+function pickFrom(sorted, brand) {
+  const wanted = brand == null ? [] : [brand].flat().filter(Boolean);
+
+  for (const candidate of wanted) {
+    const hits = sorted.filter(
+      (p) => String(p.brand ?? '').toUpperCase() === String(candidate).toUpperCase(),
+    );
+    if (hits.length > 0) return { chosen: hits[0], preferred: hits, matchedBrand: candidate };
+  }
+
+  return { chosen: sorted[0], preferred: [], matchedBrand: null };
 }
 
 function sorter(prefer) {

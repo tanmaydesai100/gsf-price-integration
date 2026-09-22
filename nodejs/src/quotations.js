@@ -40,6 +40,35 @@ export const DEFAULT_BRAND_PRIORITY = ['MANN-FILTER', 'BOSCH'];
 const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''));
 const round2 = (n) => Math.round(n * 100) / 100;
 
+/** Trade cost plus the markup, rounded once, per unit. */
+export const sellPrice = (trade, percent) =>
+  trade == null ? null : round2(trade * (1 + percent / 100));
+
+const quantityOf = (line) => Math.max(1, Number.parseInt(line?.quantity ?? 1, 10) || 1);
+
+/**
+ * Totals are computed from the lines every time rather than stored and
+ * adjusted, so editing a quotation cannot leave the total disagreeing with
+ * what is on it.
+ */
+function totalsFor(lines, markup) {
+  const quoted = lines.filter((l) => l.found);
+
+  return {
+    services: lines.length,
+    quoted: quoted.length,
+    unpriced: lines.length - quoted.length,
+    items: quoted.reduce((sum, l) => sum + quantityOf(l), 0),
+
+    // What GSF charges us, ex-VAT. Not a sell price.
+    tradeCost: round2(quoted.reduce((sum, l) => sum + (l.tradePrice ?? 0) * quantityOf(l), 0)),
+    // What the customer is quoted, ex-VAT.
+    sell: round2(quoted.reduce((sum, l) => sum + (l.sellPrice ?? 0) * quantityOf(l), 0)),
+    rrp: round2(quoted.reduce((sum, l) => sum + (l.rrp ?? 0) * quantityOf(l), 0)),
+    markupPercent: markup,
+  };
+}
+
 // ------------------------------------------------------------------- store
 
 export const quotations = {
@@ -63,12 +92,14 @@ export const quotations = {
         }),
     );
 
-    return loaded.filter(Boolean).sort(byDateDescending);
+    return loaded.filter(Boolean).map(normalise).sort(byDateDescending);
   },
 
   async get(number) {
     try {
-      return JSON.parse(await fs.readFile(path.join(storeDir(), `${number}.json`), 'utf8'));
+      return normalise(
+        JSON.parse(await fs.readFile(path.join(storeDir(), `${number}.json`), 'utf8')),
+      );
     } catch {
       return null;
     }
@@ -85,6 +116,35 @@ export const quotations = {
     return quotation;
   },
 };
+
+/**
+ * Quotations written before quantities and markup existed have neither, and
+ * rewriting stored files to add them would edit quotes that have already been
+ * given out. They are filled in on the way out instead: quantity 1, and a sell
+ * price derived from the trade cost that was captured at the time.
+ *
+ * Totals are always recomputed from the lines, so a stored total can never
+ * drift from what the quotation actually contains.
+ */
+function normalise(quotation) {
+  if (!quotation || !Array.isArray(quotation.lines)) return quotation;
+
+  const markupPercent = quotation.markupPercent ?? config.markupPercent;
+
+  const lines = quotation.lines.map((line) => ({
+    ...line,
+    quantity: Math.max(1, Number.parseInt(line.quantity ?? 1, 10) || 1),
+    sellPrice: line.sellPrice ?? (line.found ? sellPrice(line.tradePrice, markupPercent) : null),
+  }));
+
+  return {
+    ...quotation,
+    markupPercent,
+    lines,
+    totals: totalsFor(lines, markupPercent),
+    needsReview: lines.some((l) => l.needsReview),
+  };
+}
 
 /** Newest first, by the date the user entered; created-at breaks ties. */
 function byDateDescending(a, b) {
@@ -147,17 +207,33 @@ export async function createQuotation({
     throw new GsfError('Pick at least one service.');
   }
 
+  // A service is either a bare category name - price the whole category and
+  // let the brand rule decide - or { category, group }, one specific fitment
+  // the user picked. The picker sends the second; the CLI can send either.
+  const wanted = services.map((entry) =>
+    typeof entry === 'string' ? { category: entry, group: null } : entry,
+  );
+
+  for (const entry of wanted) {
+    if (!entry?.category) throw new GsfError('Every service needs a category.');
+  }
+
   const prices = service ?? new GsfPriceService();
   const lines = [];
 
   // Sequential, not parallel: these go to a supplier behind a WAF, and a burst
   // of concurrent requests per quotation is exactly the shape that gets an
   // account blocked. A quote is a handful of parts; the wait is acceptable.
-  for (const category of services) {
-    lines.push(await priceLine(prices, registration, category, brands, fitment, prefer));
+  for (const entry of wanted) {
+    lines.push(await priceLine(prices, registration, entry, brands, fitment, prefer));
   }
 
-  const quoted = lines.filter((l) => l.found);
+  const markupPercent = config.markupPercent;
+  for (const line of lines) {
+    line.quantity = 1;
+    line.sellPrice = line.found ? sellPrice(line.tradePrice, markupPercent) : null;
+  }
+
   const vehicle = lines.find((l) => l.vehicle)?.vehicle ?? null;
 
   const quotation = {
@@ -170,16 +246,10 @@ export async function createQuotation({
     vin: lines.find((l) => l.vin)?.vin ?? null,
 
     brandPriority: [brands].flat().filter(Boolean),
+    markupPercent,
     lines,
 
-    totals: {
-      services: lines.length,
-      quoted: quoted.length,
-      unpriced: lines.length - quoted.length,
-      // Our buying cost from GSF, ex-VAT. NOT a sell price. See README.
-      tradeCost: round2(quoted.reduce((sum, l) => sum + (l.tradePrice ?? 0), 0)),
-      rrp: round2(quoted.reduce((sum, l) => sum + (l.rrp ?? 0), 0)),
-    },
+    totals: totalsFor(lines, markupPercent),
 
     needsReview: lines.some((l) => l.needsReview),
   };
@@ -187,13 +257,66 @@ export async function createQuotation({
   return quotations.put(quotation);
 }
 
-async function priceLine(prices, registration, category, brands, fitment, prefer) {
+async function priceLine(prices, registration, entry, brands, fitment, prefer) {
+  const { category, group } = entry;
+
   try {
+    // A chosen fitment is priced from the option list, so the line records the
+    // exact position and variant the user picked rather than re-deciding.
+    if (group) {
+      const all = await prices.listOptions(registration, category, brands, prefer);
+      const found = all.options.find((o) => o.group === group);
+
+      if (!found) {
+        return {
+          category,
+          group,
+          found: false,
+          reason: 'That fitment is no longer priced or in stock.',
+          needsReview: true,
+          reviewReason: 'The option chosen is gone - pick another fitment.',
+        };
+      }
+
+      return {
+        category,
+        found: true,
+
+        position: found.position,
+        group: found.group,
+        label: found.label,
+
+        brand: found.brand,
+        sku: found.sku,
+        description: found.description,
+
+        tradePrice: found.tradePrice,
+        rrp: found.rrp,
+
+        availability: found.availability,
+        brandSelected: found.brandSelected,
+        fallbackUsed: !found.brandMatched && [brands].flat().filter(Boolean).length > 0,
+
+        // The fitment was chosen deliberately, so there is nothing left to
+        // review - that was the whole point of the picker.
+        needsReview: false,
+        reviewReason: null,
+
+        alternatives: found.alternatives ?? [],
+
+        // The quotation takes its vehicle from the lines, so this path has to
+        // carry it too - listOptions returns it alongside the options.
+        vehicle: all.vehicle,
+        vin: all.vin,
+      };
+    }
+
     const r = await prices.getPartPrice(registration, category, brands, fitment, prefer);
 
     if (!r.found) {
       return {
         category,
+        group: group ?? null,
         found: false,
         reason: r.reason ?? 'Nothing quotable for this vehicle.',
         considered: r.considered ?? 0,
@@ -205,6 +328,10 @@ async function priceLine(prices, registration, category, brands, fitment, prefer
     return {
       category,
       found: true,
+
+      position: r.fitment ?? null,
+      group: r.fitmentGroup ?? null,
+      label: null,
 
       brand: r.brand,
       sku: r.sku,
@@ -238,6 +365,7 @@ async function priceLine(prices, registration, category, brands, fitment, prefer
     // of the quotation.
     return {
       category,
+      group: group ?? null,
       found: false,
       reason: error.message,
       error: error.constructor?.name ?? 'Error',
@@ -247,17 +375,100 @@ async function priceLine(prices, registration, category, brands, fitment, prefer
   }
 }
 
+// ------------------------------------------------------------------ update
+
+/**
+ * Edit a stored quotation: change quantities, drop lines, add new ones.
+ *
+ * `lines` is the whole desired set, as { category, group, quantity }. Anything
+ * missing from it is removed.
+ *
+ * A line already on the quotation KEEPS ITS STORED PRICE. Only genuinely new
+ * lines are priced, and only they see today's stock. Re-pricing the whole
+ * quotation on every edit would silently move the value of a quote already
+ * given to a customer, which is the one thing a snapshot exists to prevent.
+ */
+export async function updateQuotation(number, { lines: wanted, service = null } = {}) {
+  const existing = await quotations.get(number);
+  if (!existing) throw new GsfError(`No quotation "${number}".`);
+
+  if (!Array.isArray(wanted)) throw new GsfError('lines must be an array.');
+  if (wanted.length === 0) throw new GsfError('A quotation needs at least one line.');
+
+  const markupPercent = existing.markupPercent ?? config.markupPercent;
+  const keyOf = (line) => `${line.category}\u0000${line.group ?? ''}`;
+  const byKey = new Map(existing.lines.map((line) => [keyOf(line), line]));
+
+  const prices = service ?? new GsfPriceService();
+  const brands = existing.brandPriority?.length ? existing.brandPriority : DEFAULT_BRAND_PRIORITY;
+
+  const next = [];
+  for (const entry of wanted) {
+    if (!entry?.category) throw new GsfError('Every line needs a category.');
+
+    const quantity = Math.max(1, Number.parseInt(entry.quantity ?? 1, 10) || 1);
+    const kept = byKey.get(keyOf(entry));
+
+    if (kept) {
+      next.push({
+        ...kept,
+        quantity,
+        sellPrice: kept.sellPrice ?? (kept.found ? sellPrice(kept.tradePrice, markupPercent) : null),
+      });
+      continue;
+    }
+
+    const priced = await priceLine(prices, existing.registration, entry, brands, null, null);
+    priced.quantity = quantity;
+    priced.sellPrice = priced.found ? sellPrice(priced.tradePrice, markupPercent) : null;
+    next.push(priced);
+  }
+
+  return quotations.put({
+    ...existing,
+    lines: next,
+    totals: totalsFor(next, markupPercent),
+    needsReview: next.some((l) => l.needsReview),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 // ------------------------------------------------------------------ export
 
 /**
  * Everything a read-only reviewer needs, and nothing else. This is what gets
  * baked into the page shared outside this machine, so it carries no cookies,
  * no credentials and no account number.
+ *
+ * It also carries NO COST. What GSF charges us is the commercial term behind
+ * the margin, and a shared page is the one artefact that can end up in front
+ * of a customer - stripping the field is the only way to be sure, since
+ * hiding it in the UI still leaves it readable in the page source.
  */
-export async function exportForReview() {
+export async function exportForReview({ includeCost = false } = {}) {
+  const all = await quotations.all();
+
   return {
     generatedAt: new Date().toISOString(),
     source: config.baseUrl,
-    quotations: await quotations.all(),
+    quotations: includeCost ? all : all.map(withoutCost),
+  };
+}
+
+function withoutCost(quotation) {
+  const { tradeCost, rrp, markupPercent, ...totals } = quotation.totals ?? {};
+  const { markupPercent: rate, ...rest } = quotation;
+
+  return {
+    ...rest,
+    totals,
+    lines: (quotation.lines ?? []).map((line) => {
+      const { tradePrice, rrp: lineRrp, alternatives, ...kept } = line;
+      return {
+        ...kept,
+        // Brands stay - Chris needs them to judge the part - but not prices.
+        alternatives: (alternatives ?? []).map(({ sku, brand }) => ({ sku, brand })),
+      };
+    }),
   };
 }

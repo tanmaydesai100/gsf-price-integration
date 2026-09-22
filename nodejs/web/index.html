@@ -166,6 +166,35 @@
   .chip button:hover { opacity: 1; }
 
   .hint { font-size: 12px; color: var(--faint); }
+
+  /* fitment picker */
+  .opts { border: 1px solid var(--line); border-radius: 3px; background: var(--ground);
+          max-height: 300px; overflow-y: auto; }
+  .opts-head { padding: 8px 10px; border-bottom: 1px solid var(--line);
+               font-family: var(--display); font-size: 11px; font-weight: 600;
+               letter-spacing: 0.07em; text-transform: uppercase; color: var(--soft); }
+  .pos-head { padding: 7px 10px 4px; font-family: var(--display); font-size: 10px;
+              font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+              color: var(--accent); background: var(--accent-wash); }
+  .opt { display: flex; gap: 9px; padding: 8px 10px; border-bottom: 1px solid var(--line);
+         cursor: pointer; align-items: flex-start; }
+  .opt:last-child { border-bottom: 0; }
+  .opt:hover { background: var(--raised); }
+  .opt input { margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+  .opt-main { min-width: 0; flex: 1; }
+  .opt-label { font-size: 13px; line-height: 1.35; }
+  .opt-sub { font-size: 12px; color: var(--soft); margin-top: 2px;
+             display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  .opt-price { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums;
+               white-space: nowrap; }
+  .picked { display: flex; flex-direction: column; gap: 5px; }
+  .picked-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px;
+                background: var(--accent-wash); border-radius: 2px; padding: 5px 6px 5px 9px; }
+  .picked-row .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis;
+                     white-space: nowrap; }
+  .picked-row .amt { font-family: var(--mono); font-weight: 600; }
+  .picked-row button { background: none; border: 0; color: var(--soft); font-size: 15px;
+                       line-height: 1; padding: 0 2px; cursor: pointer; }
   .err { font-size: 13px; color: var(--bad); border-left: 3px solid var(--bad); padding-left: 9px; }
 
   /* -------------------------------------------------------------- list */
@@ -243,6 +272,24 @@
   .alts { font-size: 12px; color: var(--soft); margin-top: 6px; }
   .alts span { font-family: var(--mono); }
 
+  .stepper { display: inline-flex; align-items: center; gap: 2px; }
+  .stepper button {
+    width: 24px; height: 24px; padding: 0; font-size: 15px; line-height: 1;
+    font-family: var(--body); background: var(--raised); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 3px; cursor: pointer;
+  }
+  .stepper button[disabled] { opacity: 0.4; cursor: default; }
+  .stepper b { min-width: 20px; text-align: center; font-family: var(--mono); }
+
+  .drop {
+    background: none; border: 0; color: var(--faint); font-size: 17px; line-height: 1;
+    padding: 2px 4px; cursor: pointer; border-radius: 3px;
+  }
+  .drop:hover { color: var(--bad); background: var(--raised); }
+
+  .editbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+             padding: 12px 16px; border-top: 1px solid var(--line); }
+
   .foot { padding: 13px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
 
   .empty { padding: 56px 20px; text-align: center; color: var(--faint); }
@@ -317,6 +364,12 @@
     var qs = useState(''), q = qs[0], setQ = qs[1];
     var rs = useState([]), results = rs[0], setResults = rs[1];
 
+    // The category being fitted right now: its options, and which are ticked.
+    var os = useState(null), opts = os[0], setOpts = os[1];
+    var ls = useState(false), loading = ls[0], setLoading = ls[1];
+    var ts = useState({}), ticked = ts[0], setTicked = ts[1];
+    var es = useState(null), oerr = es[0], setOerr = es[1];
+
     useEffect(function () {
       var cancelled = false;
       var term = q.trim();
@@ -332,11 +385,59 @@
       return function () { cancelled = true; clearTimeout(timer); };
     }, [q]);
 
-    function add(name) {
-      if (chosen.indexOf(name) === -1) onChange(chosen.concat([name]));
+    // Adding a service fetches its fitments. One option means there is no
+    // decision to make, so it joins the quotation straight away.
+    function openCategory(name) {
+      if (!props.registration.trim()) {
+        setOerr('Enter a registration first — fitments depend on the vehicle.');
+        return;
+      }
+
       setQ('');
       setResults([]);
+      setOerr(null);
+      setLoading(true);
+      setOpts(null);
+
+      fetch('/api/options?registration=' + encodeURIComponent(props.registration) +
+            '&category=' + encodeURIComponent(name))
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'Could not load fitments.');
+          var list = out.body.options || [];
+
+          if (list.length === 0) {
+            setOerr('No priced, in-stock part for “' + name + '” on this vehicle.');
+            return;
+          }
+          if (list.length === 1) {
+            addOptions(name, list);
+            return;
+          }
+
+          setOpts({ category: name, list: list });
+          setTicked({});
+        })
+        .catch(function (err) { setOerr(err.message); })
+        .finally(function () { setLoading(false); });
     }
+
+    function addOptions(category, list) {
+      var additions = list
+        .filter(function (o) { return !chosen.some(function (c) { return c.group === o.group; }); })
+        .map(function (o) {
+          return {
+            category: category, group: o.group, label: o.label,
+            brand: o.brand, sellPrice: o.sellPrice, availability: o.availability
+          };
+        });
+
+      onChange(chosen.concat(additions));
+      setOpts(null);
+      setTicked({});
+    }
+
+    var tickedCount = Object.keys(ticked).filter(function (k) { return ticked[k]; }).length;
 
     return h`
       <div>
@@ -344,29 +445,79 @@
         <input id="service-search" type="search" placeholder="Search 668 categories — try “brake”"
                value=${q} onInput=${function (e) { setQ(e.target.value); }} autocomplete="off" />
 
-        ${results.length > 0 && h`
+        ${loading && h`<p class="hint"><span class="spinner"></span>Loading fitments…</p>`}
+        ${oerr && h`<p class="err" style=${{ marginTop: '7px' }}>${oerr}</p>`}
+
+        ${results.length > 0 && !opts && h`
           <div class="results" style=${{ marginTop: '7px' }}>
             ${results.map(function (name) {
-              var already = chosen.indexOf(name) !== -1;
-              return h`<button type="button" key=${name} disabled=${already}
-                         onClick=${function () { add(name); }}>
-                         ${name}${already ? ' — added' : ''}
+              return h`<button type="button" key=${name} onClick=${function () { openCategory(name); }}>
+                         ${name}
                        </button>`;
             })}
           </div>`}
 
+        ${opts && h`
+          <div class="opts" style=${{ marginTop: '8px' }}>
+            <div class="opts-head">${opts.category} · ${opts.list.length} fitments · best price each</div>
+            ${opts.list.map(function (o, i) {
+              var prev = i > 0 ? opts.list[i - 1].position : null;
+              var head = o.position !== prev
+                ? h`<div class="pos-head" key=${'h' + o.group}>${o.position || 'Fitment'}</div>`
+                : null;
+
+              return h`<${React.Fragment} key=${o.group}>
+                ${head}
+                <label class="opt">
+                  <input type="checkbox" checked=${Boolean(ticked[o.group])}
+                         onChange=${function (ev) {
+                           var next = Object.assign({}, ticked);
+                           next[o.group] = ev.target.checked;
+                           setTicked(next);
+                         }} />
+                  <span class="opt-main">
+                    <span class="opt-label">${o.label}</span>
+                    <span class="opt-sub">
+                      <span>${o.brand}</span>
+                      <span class=${availClass(o.availability, false)}>${o.availability}</span>
+                      ${o.candidates > 1 && h`<span>${o.candidates} brands</span>`}
+                    </span>
+                  </span>
+                  <span class="opt-price">${money(o.sellPrice)}</span>
+                </label>
+              <//>`;
+            })}
+          </div>
+
+          <div style=${{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button type="button" class="primary" disabled=${tickedCount === 0}
+                    onClick=${function () {
+                      addOptions(opts.category, opts.list.filter(function (o) { return ticked[o.group]; }));
+                    }}>
+              Add ${tickedCount || ''} ${tickedCount === 1 ? 'line' : 'lines'}
+            </button>
+            <button type="button" class="ghost" onClick=${function () { setOpts(null); setTicked({}); }}>
+              Cancel
+            </button>
+          </div>`}
+
         ${chosen.length > 0 && h`
-          <div class="chosen" style=${{ marginTop: '9px' }}>
-            ${chosen.map(function (name) {
-              return h`<span class="chip" key=${name}>${name}
-                <button type="button" aria-label=${'Remove ' + name}
-                        onClick=${function () { onChange(chosen.filter(function (c) { return c !== name; })); }}>×</button>
+          <div class="picked" style=${{ marginTop: '9px' }}>
+            ${chosen.map(function (c) {
+              return h`<span class="picked-row" key=${c.group || c.category}>
+                <span class="lbl">${c.label || c.category}</span>
+                <span class="amt">${money(c.sellPrice)}</span>
+                <button type="button" aria-label=${'Remove ' + (c.label || c.category)}
+                        onClick=${function () {
+                          onChange(chosen.filter(function (x) { return x !== c; }));
+                        }}>×</button>
               </span>`;
             })}
           </div>`}
 
-        ${chosen.length === 0 && h`<p class="hint" style=${{ marginTop: '7px' }}>
-          Nothing added yet. Names must match GSF exactly — search rather than type.
+        ${chosen.length === 0 && !opts && h`<p class="hint" style=${{ marginTop: '7px' }}>
+          Search a category, then pick the fitment you want. A category with only one
+          fitment is added straight away.
         </p>`}
       </div>`;
   }
@@ -389,7 +540,11 @@
       fetch('/api/quotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registration: reg, date: date, services: services })
+        body: JSON.stringify({
+          registration: reg,
+          date: date,
+          services: services.map(function (c) { return { category: c.category, group: c.group }; })
+        })
       })
         .then(function (res) { return res.json().then(function (body) { return { res: res, body: body }; }); })
         .then(function (out) {
@@ -428,7 +583,7 @@
             </div>
           </div>
 
-          <${ServicePicker} chosen=${services} onChange=${setServices} />
+          <${ServicePicker} chosen=${services} onChange=${setServices} registration=${reg} />
 
           ${error && h`<p class="err">${error}</p>`}
 
@@ -438,6 +593,10 @@
               : 'Create quotation'}
           </button>
 
+          ${services.length > 0 && h`<p class="hint">
+            ${services.length} ${services.length === 1 ? 'line' : 'lines'} ·
+            ${money(services.reduce(function (t, c) { return t + (c.sellPrice || 0); }, 0))} ex-VAT
+          </p>`}
           ${!busy && missing && h`<p class="hint">${missing}</p>`}
           ${busy && h`<p class="hint">Each service is priced against GSF in turn, so this takes a few seconds.</p>`}
         </div>
@@ -470,7 +629,7 @@
               <span class="qfoot">
                 <span>${q.services} ${q.services === 1 ? 'line' : 'lines'}</span>
                 ${q.needsReview && h`<span class="pill odd">Review</span>`}
-                <span class="qtotal">${money(q.tradeCost)}</span>
+                <span class="qtotal">${money(q.sell)}</span>
               </span>
             </button>`;
         })}
@@ -480,13 +639,13 @@
   // ------------------------------------------------------------ detail
 
   function Line(props) {
-    var l = props.line;
+    var l = props.line, edit = props.editable;
 
     if (!l.found) {
       return h`
         <tr class="dead">
           <td class="cat">${l.category}</td>
-          <td colspan="4">
+          <td colspan=${edit ? 5 : 4}>
             Not priced — ${l.reason}
             ${l.considered > 0 && h`<span class="note">${l.considered} candidates returned, none quotable.</span>`}
           </td>
@@ -494,11 +653,13 @@
     }
 
     var odd = Boolean(l.unknownAvailability);
+    var qty = l.quantity || 1;
 
     return h`
       <tr class=${l.needsReview ? 'flagged' : ''}>
         <td class="cat">
           ${l.category}
+          ${l.label && h`<div class="sku" style=${{ textTransform: 'none' }}>${l.label}</div>`}
           ${l.needsReview && h`<span class="note">⚠ ${l.reviewReason || 'Needs review'}</span>`}
         </td>
         <td>
@@ -507,24 +668,106 @@
           <div class="sku">${l.sku}</div>
           ${l.alternatives && l.alternatives.length > 0 && h`
             <div class="alts">Also available: ${l.alternatives.map(function (a, i) {
-              return h`<span key=${a.sku}>${i > 0 ? ' · ' : ''}${a.brand} ${money(a.tradePrice)}</span>`;
+              return h`<span key=${a.sku}>${i > 0 ? ' · ' : ''}${a.brand}</span>`;
             })}</div>`}
         </td>
         <td>
           <span class=${availClass(l.availability, odd)}>${l.availability}</span>
           ${odd && h`<span class="note">Unrecognised: ${l.unknownAvailability.join(', ')}</span>`}
-          ${l.fitment && l.fitment !== 'N/A' && h`<div class="sku">${l.fitment}</div>`}
         </td>
-        <td class="num">${money(l.rrp)}</td>
-        <td class="num"><b>${money(l.tradePrice)}</b></td>
+        <td class="num">
+          ${edit
+            ? h`<span class="stepper">
+                  <button type="button" aria-label="One fewer" disabled=${qty <= 1}
+                          onClick=${function () { props.onQuantity(qty - 1); }}>−</button>
+                  <b>${qty}</b>
+                  <button type="button" aria-label="One more"
+                          onClick=${function () { props.onQuantity(qty + 1); }}>+</button>
+                </span>`
+            : qty}
+        </td>
+        <td class="num">${money(l.sellPrice)}</td>
+        <td class="num"><b>${money((l.sellPrice || 0) * qty)}</b></td>
+        ${edit && h`<td class="num">
+          <button type="button" class="drop" aria-label=${'Remove ' + l.category}
+                  onClick=${props.onRemove}>×</button>
+        </td>`}
       </tr>`;
   }
 
   function QuoteDetail(props) {
     var q = props.quote;
+    var bs = useState(false), saving = bs[0], setSaving = bs[1];
+    var es = useState(null), error = es[0], setError = es[1];
+    var as = useState(false), adding = as[0], setAdding = as[1];
+
+    // Chris's copy is a record of what was quoted, so it is never editable.
+    var editable = !REVIEW && Boolean(q);
+
+    // The whole desired line set goes back each time. Lines already on the
+    // quotation keep the price they were quoted at; only new ones are priced.
+    function save(lines) {
+      setSaving(true);
+      setError(null);
+
+      fetch('/api/quotations/' + encodeURIComponent(q.number), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: lines })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'Could not save the change.');
+          setAdding(false);
+          props.onChanged(out.body);
+        })
+        .catch(function (err) { setError(err.message); })
+        .finally(function () { setSaving(false); });
+    }
+
+    function spec(line) {
+      return { category: line.category, group: line.group || null, quantity: line.quantity || 1 };
+    }
+
+    function setQuantity(index, quantity) {
+      if (quantity < 1) return;
+      save(q.lines.map(function (l, i) {
+        return i === index ? Object.assign(spec(l), { quantity: quantity }) : spec(l);
+      }));
+    }
+
+    function removeLine(index) {
+      if (q.lines.length === 1) {
+        setError('A quotation needs at least one line. Delete the quotation instead.');
+        return;
+      }
+      save(q.lines.filter(function (_l, i) { return i !== index; }).map(spec));
+    }
+
+    function addLines(picked) {
+      var have = {};
+      var lines = q.lines.map(function (l) {
+        have[l.category + '\u0000' + (l.group || '')] = true;
+        return spec(l);
+      });
+
+      picked.forEach(function (p) {
+        var key = p.category + '\u0000' + (p.group || '');
+        if (have[key]) return;
+        have[key] = true;
+        lines.push({ category: p.category, group: p.group || null, quantity: 1 });
+      });
+
+      save(lines);
+    }
+
     if (!q) {
       return h`<div class="panel empty">
-        <p>Pick a quotation from the list to see every line, what it cost and why that part was chosen.</p>
+        <p>
+          ${props.count > 0
+            ? 'Pick a quotation from the list to see every line, what it cost and why that part was chosen.'
+            : 'No quotations yet. Enter a registration, pick the fitments you want, and the quotation will open here.'}
+        </p>
       </div>`;
     }
 
@@ -542,15 +785,14 @@
               <div>Vehicle <b>${q.vehicle || 'not identified'}</b></div>
               <div>Date <b>${longDate(q.date)}</b></div>
               ${q.vin && h`<div>VIN <b>${q.vin}</b></div>`}
-              ${q.brandPriority && q.brandPriority.length > 0 &&
-                h`<div>Brand preference <b>${q.brandPriority.join(' → ')}</b></div>`}
             </div>
           </div>
           <div class="totals">
-            <span class="cap">Trade cost ex-VAT</span>
-            <span class="big">${money(q.totals && q.totals.tradeCost)}</span>
+            <span class="cap">Quotation total ex-VAT</span>
+            <span class="big">${money(q.totals && q.totals.sell)}</span>
             <span class="cap" style=${{ color: 'var(--faint)' }}>
-              RRP ${money(q.totals && q.totals.rrp)}
+              ${q.totals && q.totals.items} ${q.totals && q.totals.items === 1 ? 'item' : 'items'} ·
+              parts only
             </span>
           </div>
         </div>
@@ -558,28 +800,50 @@
         ${flagged > 0 && h`
           <p class="banner" style=${{ margin: '14px 16px 0' }}>
             <b>${flagged} of ${q.lines.length} ${flagged === 1 ? 'line needs' : 'lines need'} a human decision.</b>${' '}
-            GSF returned more than one fitment group, which means more than one physical
-            size. The catalogue cannot say which one fits, so it has not guessed.
+            More than one fitment came back and none was chosen, so the catalogue could
+            not say which physically fits.
           </p>`}
+
+        ${error && h`<p class="err" style=${{ margin: '14px 16px 0' }}>${error}</p>`}
 
         <div class="tablewrap">
           <table>
             <thead>
               <tr>
                 <th>Service</th><th>Part</th><th>Availability</th>
-                <th class="num">RRP</th><th class="num">Trade</th>
+                <th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th>
+                ${editable && h`<th></th>`}
               </tr>
             </thead>
             <tbody>
-              ${(q.lines || []).map(function (l, i) { return h`<${Line} line=${l} key=${l.category + i} />`; })}
+              ${(q.lines || []).map(function (l, i) {
+                return h`<${Line} line=${l} key=${l.category + (l.group || '') + i} editable=${editable && !saving}
+                           onQuantity=${function (n) { setQuantity(i, n); }}
+                           onRemove=${function () { removeLine(i); }} />`;
+              })}
             </tbody>
           </table>
         </div>
 
+        ${editable && h`
+          <div class="editbar">
+            ${saving && h`<span class="hint"><span class="spinner"></span>Saving…</span>`}
+            ${!saving && !adding && h`
+              <button type="button" class="ghost" onClick=${function () { setAdding(true); }}>
+                + Add a line
+              </button>`}
+            ${!saving && adding && h`
+              <div style=${{ width: '100%' }}>
+                <${ServicePicker} chosen=${[]} onChange=${addLines} registration=${q.registration} />
+                <button type="button" class="ghost" style=${{ marginTop: '8px' }}
+                        onClick=${function () { setAdding(false); }}>Cancel</button>
+              </div>`}
+          </div>`}
+
         <p class="foot">
-          Priced ${new Date(q.createdAt).toLocaleString('en-GB')}. Prices and stock are a
-          snapshot taken then, not today's. Trade cost is what GSF charges us, ex-VAT —
-          it is not a sell price.
+          Priced ${new Date(q.createdAt).toLocaleString('en-GB')}${q.updatedAt ? ', edited ' + new Date(q.updatedAt).toLocaleString('en-GB') : ''}.
+          Prices and stock are a snapshot taken then, not today's. Parts only, ex-VAT —
+          no labour.
         </p>
       </div>`;
   }
@@ -600,7 +864,8 @@
           number: q.number, registration: q.registration, vehicle: q.vehicle,
           date: q.date, createdAt: q.createdAt,
           services: (q.totals && q.totals.services) || (q.lines || []).length,
-          tradeCost: (q.totals && q.totals.tradeCost) || 0,
+          sell: (q.totals && q.totals.sell) || 0,
+          items: (q.totals && q.totals.items) || 0,
           needsReview: Boolean(q.needsReview)
         };
       });
@@ -615,11 +880,6 @@
     }
 
     useEffect(function () { refresh(); }, []);
-
-    // Open the newest by default, so the page never loads as an empty shell.
-    useEffect(function () {
-      if (!selected && summaries.length > 0) setSelected(summaries[0].number);
-    }, [summaries]);
 
     useEffect(function () {
       if (!selected) { setDetail(null); return; }
@@ -643,7 +903,7 @@
           <h1>GSF Parts Quotations</h1>
           <span class="sub">${REVIEW ? 'Parts validation · read-only' : 'Version 2'}</span>
           <span class="spacer"></span>
-          <span class="stamp">Internal — shows trade cost</span>
+          <span class="stamp">Parts only · ex-VAT</span>
         </header>
 
         ${REVIEW && h`
@@ -659,7 +919,8 @@
             ${!REVIEW && h`<${CreateForm} onCreated=${function (q) { refresh(); setSelected(q.number); }} />`}
             <${QuoteList} items=${summaries} selected=${selected} onSelect=${setSelected} />
           </div>
-          <${QuoteDetail} quote=${detail} />
+          <${QuoteDetail} quote=${detail} count=${summaries.length}
+            onChanged=${function (updated) { setDetail(updated); refresh(); }} />
         </div>
       </div>`;
   }
