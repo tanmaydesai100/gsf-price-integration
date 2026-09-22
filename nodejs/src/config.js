@@ -7,6 +7,11 @@ const int = (value, fallback) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const num = (value, fallback) => {
+  const n = Number.parseFloat(value ?? '');
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export const config = {
   baseUrl: process.env.GSF_BASE_URL || 'https://trade.gsfcarparts.com',
 
@@ -71,6 +76,17 @@ export const config = {
   // 'availability' = soonest-available first, then cheapest.
   // 'price'        = cheapest first, then soonest-available.
   prefer: process.env.GSF_PREFER || 'availability',
+
+  /*
+   * Markup on trade cost, as a percentage, to get the price a customer sees.
+   *
+   * MARKUP, NOT MARGIN: 58.2 turns a 20.90 part into 33.06 (x1.582), not into
+   * 50.00 (20.90 / 0.418). Ex-VAT on both sides - VAT goes on at invoice.
+   *
+   * Every quotation stores the rate it was built with, so changing this never
+   * moves the value of a quote already given to a customer.
+   */
+  markupPercent: num(process.env.GSF_MARKUP_PERCENT, 58.2),
 
   // Used to encrypt the cached cookie jar at rest. Required.
   appKey: process.env.GSF_APP_KEY || process.env.APP_KEY || null,
