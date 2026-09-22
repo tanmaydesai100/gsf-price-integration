@@ -12,13 +12,27 @@ import { GsfCategoryMap } from './categories.js';
 import { GsfClient } from './client.js';
 import { config } from './config.js';
 
-/** Sooner is better. Anything not listed sorts last. */
+/**
+ * Sooner is better.
+ *
+ * GSF's availability vocabulary is larger than their docs suggest and it
+ * changes: GroupTomorrow and HubAfternoon were both discovered in live data
+ * after the fact, and both were being buried. An unlisted value therefore
+ * sorts MID-TABLE rather than last - in both real cases the unknown value was
+ * faster than Group72Hours, so burying it picked the wrong part - and the
+ * result carries `unknownAvailability` so a new value is visible instead of
+ * silently mis-ranked.
+ */
 const AVAILABILITY_RANK = {
   Immediate: 0, // on the shelf at our branch
-  HubTomorrow: 1, // next day from a regional hub
-  GroupTomorrow: 2, // next day from the wider group
-  Group72Hours: 3, // ~3 days from the wider group
+  HubAfternoon: 1, // later today from a regional hub
+  HubTomorrow: 2, // next day from a regional hub
+  GroupTomorrow: 3, // next day from the wider group
+  Group72Hours: 5, // ~3 days from the wider group
 };
+
+/** Between GroupTomorrow and Group72Hours. See the note above. */
+const UNKNOWN_AVAILABILITY_RANK = 4;
 
 const normaliseReg = (reg) => String(reg).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
@@ -139,11 +153,33 @@ export function select(payload, brand, fitment, prefer) {
 
   inStock.sort(sorter(prefer));
 
-  const preferred = brand
-    ? inStock.filter((p) => String(p.brand ?? '').toUpperCase() === brand.toUpperCase())
-    : [];
+  // `brand` is a preference in PRIORITY ORDER: try MANN-FILTER, then BOSCH,
+  // then fall back to whatever is soonest. The first brand with anything
+  // quotable wins outright - we do not compare across brands on price.
+  const wanted = brand == null ? [] : [brand].flat().filter(Boolean);
+  let preferred = [];
+  let matchedBrand = null;
+
+  for (const candidate of wanted) {
+    const hits = inStock.filter(
+      (p) => String(p.brand ?? '').toUpperCase() === String(candidate).toUpperCase(),
+    );
+    if (hits.length > 0) {
+      preferred = hits;
+      matchedBrand = candidate;
+      break;
+    }
+  }
 
   const chosen = preferred[0] ?? inStock[0];
+
+  // Surface any availability value we do not rank, so a new one shows up as a
+  // flag on the quote instead of quietly changing which part gets picked.
+  const unknownAvailability = [
+    ...new Set(
+      inStock.map((p) => p.availability).filter((a) => a && !(a in AVAILABILITY_RANK)),
+    ),
+  ];
 
   const alternatives = inStock
     .filter(
@@ -184,9 +220,11 @@ export function select(payload, brand, fitment, prefer) {
     fitmentGroup: chosen.groupedPartNumber ?? null,
 
     strategy: prefer,
-    brandRequested: brand,
+    brandRequested: wanted.length > 0 ? wanted : null,
     brandMatched: preferred.length > 0,
-    fallbackUsed: Boolean(brand) && preferred.length === 0,
+    brandSelected: matchedBrand, // which entry of the priority list won
+    fallbackUsed: wanted.length > 0 && preferred.length === 0,
+    unknownAvailability: unknownAvailability.length > 0 ? unknownAvailability : null,
 
     needsReview,
     reviewReason: needsReview
@@ -199,7 +237,7 @@ export function select(payload, brand, fitment, prefer) {
 }
 
 function sorter(prefer) {
-  const rank = (p) => AVAILABILITY_RANK[p.availability] ?? 9;
+  const rank = (p) => AVAILABILITY_RANK[p.availability] ?? UNKNOWN_AVAILABILITY_RANK;
 
   if (prefer === 'price') {
     return (a, b) => a.customerPrice - b.customerPrice || rank(a) - rank(b);

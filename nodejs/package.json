@@ -8,16 +8,20 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "gsf": "./bin/gsf.js"
+    "gsf": "./bin/gsf.js",
+    "gsf-quote": "./bin/quote.js"
   },
   "scripts": {
     "gsf": "node bin/gsf.js",
-    "test": "node --test"
+    "test": "node --test",
+    "serve": "node bin/serve.js",
+    "quote": "node bin/quote.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "express": "^5.2.1",
     "got": "^14.4.5",
     "tough-cookie": "^5.1.0"
   },

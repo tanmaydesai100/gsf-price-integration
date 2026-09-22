@@ -102,22 +102,75 @@ test('GroupTomorrow outranks Group72Hours', () => {
   assert.equal(r.sku, 'NEXT-DAY');
 });
 
-test('an unrecognised availability value still sorts last', () => {
-  const part = (sku, availability) => ({
-    sku,
-    brand: 'X',
-    availability,
-    customerPrice: 100,
-    groupedPartNumber: 'G1',
-    fitment: null,
-  });
+// A part builder for the ranking tests: one fitment group, equal prices, so
+// availability is the only thing that can decide the winner.
+const candidate = (sku, availability, customerPrice = 100) => ({
+  sku,
+  brand: 'X',
+  availability,
+  customerPrice,
+  groupedPartNumber: 'G1',
+  fitment: null,
+});
 
-  const r = select(
-    { partData: { parts: [part('MYSTERY', 'SomethingNew'), part('KNOWN', 'Group72Hours')] } },
-    null,
-    null,
-    'availability',
-  );
+const pick = (parts, brand = null) =>
+  select({ partData: { parts } }, brand, null, 'availability');
 
+test('HubAfternoon beats everything except Immediate', () => {
+  assert.equal(pick([candidate('TOMORROW', 'HubTomorrow'), candidate('TODAY', 'HubAfternoon')]).sku, 'TODAY');
+  assert.equal(pick([candidate('TODAY', 'HubAfternoon'), candidate('NOW', 'Immediate')]).sku, 'NOW');
+});
+
+test('an unranked availability value sorts mid-table, not last', () => {
+  // Both values we have had to add - GroupTomorrow, then HubAfternoon - were
+  // FASTER than Group72Hours, so burying unknowns picked the wrong part twice.
+  const r = pick([candidate('THREE-DAY', 'Group72Hours'), candidate('MYSTERY', 'SomethingNew')]);
+  assert.equal(r.sku, 'MYSTERY');
+});
+
+test('an unranked value still loses to every known-good one', () => {
+  const r = pick([candidate('MYSTERY', 'SomethingNew'), candidate('KNOWN', 'GroupTomorrow')]);
   assert.equal(r.sku, 'KNOWN');
+});
+
+test('an unranked value is reported so it can be fixed', () => {
+  const r = pick([candidate('A', 'Immediate'), candidate('B', 'SomethingNew')]);
+  assert.deepEqual(r.unknownAvailability, ['SomethingNew']);
+
+  const clean = pick([candidate('A', 'Immediate')]);
+  assert.equal(clean.unknownAvailability, null);
+});
+
+test('brand preference is an ordered priority list', () => {
+  const parts = [
+    { ...candidate('MANN-1', 'Group72Hours'), brand: 'MANN-FILTER' },
+    { ...candidate('BOSCH-1', 'Immediate'), brand: 'BOSCH' },
+  ];
+
+  // MANN is first in the list, so it wins even though BOSCH is available
+  // sooner. We do not compare across brands - the priority is the point.
+  const r = pick(parts, ['MANN-FILTER', 'BOSCH']);
+  assert.equal(r.sku, 'MANN-1');
+  assert.equal(r.brandSelected, 'MANN-FILTER');
+  assert.equal(r.brandMatched, true);
+});
+
+test('brand list falls through to the next brand, then to anything', () => {
+  const parts = [
+    { ...candidate('BOSCH-1', 'Immediate'), brand: 'BOSCH' },
+    { ...candidate('OTHER-1', 'Immediate'), brand: 'HENGST' },
+  ];
+
+  const second = pick(parts, ['MANN-FILTER', 'BOSCH']);
+  assert.equal(second.brandSelected, 'BOSCH');
+
+  const none = pick(parts, ['MANN-FILTER', 'FEBI']);
+  assert.equal(none.brandMatched, false);
+  assert.equal(none.fallbackUsed, true);
+  assert.equal(none.found, true, 'still quotes something');
+});
+
+test('a single brand string still works', () => {
+  const parts = [{ ...candidate('BOSCH-1', 'Immediate'), brand: 'BOSCH' }];
+  assert.equal(pick(parts, 'BOSCH').brandSelected, 'BOSCH');
 });

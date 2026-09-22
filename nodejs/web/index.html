@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<!-- ARTIFACT:BEGIN  (everything between the markers is also the published review page) -->
+<title>GSF Parts Quotations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f7f6;
+    --surface: #ffffff;
+    --raised: #eef1ef;
+    --ink: #15181b;
+    --soft: #5b6670;
+    --faint: #8d979e;
+    --line: #dee3e0;
+    --accent: #0b5e5a;
+    --accent-ink: #ffffff;
+    --accent-wash: #e4efed;
+    --flag: #a85a0b;
+    --flag-wash: #fbefdf;
+    --good: #15803d;
+    --bad: #b3261e;
+    --plate: #f5d400;
+    --plate-ink: #111111;
+
+    --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #131719;
+      --surface: #1a1f22;
+      --raised: #222a2e;
+      --ink: #e7ebe9;
+      --soft: #9aa5ab;
+      --faint: #6e7a80;
+      --line: #2d3539;
+      --accent: #4fb3ab;
+      --accent-ink: #0b1f1e;
+      --accent-wash: #1c2e2d;
+      --flag: #d99341;
+      --flag-wash: #32261a;
+      --good: #4ba86b;
+      --bad: #e0685f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #131719;
+    --surface: #1a1f22;
+    --raised: #222a2e;
+    --ink: #e7ebe9;
+    --soft: #9aa5ab;
+    --faint: #6e7a80;
+    --line: #2d3539;
+    --accent: #4fb3ab;
+    --accent-ink: #0b1f1e;
+    --accent-wash: #1c2e2d;
+    --flag: #d99341;
+    --flag-wash: #32261a;
+    --good: #4ba86b;
+    --bad: #e0685f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 15px/1.5 var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+    padding-block: 22px 16px; border-bottom: 2px solid var(--ink); margin-bottom: 20px;
+  }
+  .masthead h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .masthead .sub { font-size: 13px; color: var(--soft); }
+  .masthead .spacer { flex: 1; }
+
+  .stamp {
+    font-family: var(--display); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 4px 8px; border: 1px solid var(--flag); color: var(--flag);
+    border-radius: 2px; white-space: nowrap;
+  }
+
+  /* ------------------------------------------------------------ layout */
+
+  .panes { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 880px) { .panes { grid-template-columns: 1fr; } }
+
+  .rail { display: flex; flex-direction: column; gap: 16px; }
+
+  /* -------------------------------------------------------------- form */
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+  .panel-head {
+    font-family: var(--display); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+    padding: 11px 14px; border-bottom: 1px solid var(--line);
+  }
+  .panel-body { padding: 14px; display: flex; flex-direction: column; gap: 13px; }
+
+  label { display: block; font-family: var(--display); font-size: 11px; font-weight: 600;
+          letter-spacing: 0.07em; text-transform: uppercase; color: var(--soft); margin-bottom: 5px; }
+
+  input[type="text"], input[type="date"], input[type="search"] {
+    width: 100%; padding: 8px 10px; font: 14px var(--body); color: var(--ink);
+    background: var(--ground); border: 1px solid var(--line); border-radius: 3px;
+  }
+  input#registration { font-family: var(--mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  ::placeholder { color: var(--faint); opacity: 1; font-weight: 400; letter-spacing: normal; font-style: italic; }
+  input:focus-visible, button:focus-visible, .qrow:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  button {
+    font-family: var(--display); font-size: 13px; font-weight: 600;
+    padding: 9px 14px; border-radius: 3px; border: 1px solid transparent; cursor: pointer;
+  }
+  .primary { background: var(--accent); color: var(--accent-ink); }
+  .primary[disabled] { opacity: 0.5; cursor: default; }
+  .ghost { background: transparent; color: var(--soft); border-color: var(--line); }
+
+  /* ------------------------------------------------------------ picker */
+
+  .results { max-height: 168px; overflow-y: auto; border: 1px solid var(--line);
+             border-radius: 3px; background: var(--ground); }
+  .results button {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    border-bottom: 1px solid var(--line); padding: 7px 10px;
+    font: 13px var(--body); color: var(--ink); border-radius: 0;
+  }
+  .results button:last-child { border-bottom: 0; }
+  .results button:hover { background: var(--accent-wash); }
+  .results button[disabled] { color: var(--faint); cursor: default; }
+
+  .chosen { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-wash); color: var(--accent);
+    border-radius: 2px; padding: 4px 6px 4px 9px; font-size: 13px; font-weight: 600;
+  }
+  .chip button { background: none; border: 0; color: inherit; font-size: 15px;
+                 line-height: 1; padding: 0 2px; cursor: pointer; opacity: 0.65; }
+  .chip button:hover { opacity: 1; }
+
+  .hint { font-size: 12px; color: var(--faint); }
+  .err { font-size: 13px; color: var(--bad); border-left: 3px solid var(--bad); padding-left: 9px; }
+
+  /* -------------------------------------------------------------- list */
+
+  .qrow {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--surface); border: 0; border-bottom: 1px solid var(--line);
+    padding: 11px 14px; border-radius: 0; font-family: var(--body);
+    border-left: 3px solid transparent;
+  }
+  .qrow:last-child { border-bottom: 0; }
+  .qrow:hover { background: var(--raised); }
+  .qrow[aria-current="true"] { border-left-color: var(--accent); background: var(--accent-wash); }
+  .qrow-top { display: flex; align-items: baseline; gap: 8px; }
+  .qnum { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); }
+  .qdate { margin-left: auto; font-size: 12px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .qveh { font-size: 13px; color: var(--soft); margin-top: 3px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qfoot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--faint); }
+  .qtotal { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--ink);
+            font-variant-numeric: tabular-nums; }
+
+  /* ------------------------------------------------------------ plate */
+
+  .plate {
+    display: inline-block; background: var(--plate); color: var(--plate-ink);
+    font-family: var(--display); font-weight: 700; letter-spacing: 0.08em;
+    border: 1px solid #0000002e; border-radius: 3px; padding: 3px 9px; font-size: 15px;
+  }
+  .plate.sm { font-size: 12px; padding: 2px 6px; letter-spacing: 0.06em; }
+
+  /* ------------------------------------------------------------ detail */
+
+  .detail-head { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: flex-start;
+                 padding: 16px; border-bottom: 1px solid var(--line); }
+  .detail-head h2 { font-size: 17px; font-weight: 700; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 8px; }
+  .meta div { font-size: 13px; color: var(--soft); }
+  .meta b { font-family: var(--mono); font-weight: 500; color: var(--ink); font-size: 12.5px; }
+  .totals { margin-left: auto; text-align: right; }
+  .totals .big { font-family: var(--mono); font-size: 25px; font-weight: 600;
+                 font-variant-numeric: tabular-nums; display: block; }
+  .totals .cap { font-family: var(--display); font-size: 10px; font-weight: 600;
+                 letter-spacing: 0.08em; text-transform: uppercase; color: var(--soft); }
+
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    font-family: var(--display); font-size: 10px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--soft); text-align: left;
+    padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sku { font-family: var(--mono); font-size: 12px; color: var(--soft); }
+  /* The category map is keyed lowercase; capitalise for reading, but keep
+     the stored value exactly as GSF names it. */
+  .cat { font-weight: 600; text-transform: capitalize; }
+  .chip { text-transform: capitalize; }
+  tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
+  tr.dead { color: var(--faint); }
+  tr.dead td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+
+  .pill {
+    display: inline-block; font-family: var(--display); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.05em; padding: 2px 6px; border-radius: 2px; white-space: nowrap;
+    background: var(--raised); color: var(--soft);
+  }
+  .pill.now { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+  .pill.soon { background: var(--accent-wash); color: var(--accent); }
+  .pill.odd { background: var(--flag-wash); color: var(--flag); }
+
+  .note { font-size: 12px; color: var(--flag); margin-top: 5px; display: block; }
+  .alts { font-size: 12px; color: var(--soft); margin-top: 6px; }
+  .alts span { font-family: var(--mono); }
+
+  .foot { padding: 13px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+
+  .empty { padding: 56px 20px; text-align: center; color: var(--faint); }
+  .empty p { max-width: 40ch; margin: 0 auto; }
+
+  .banner {
+    background: var(--flag-wash); border: 1px solid color-mix(in srgb, var(--flag) 35%, transparent);
+    border-radius: 4px; padding: 11px 14px; font-size: 13px; color: var(--ink); margin-bottom: 18px;
+  }
+  .banner b { font-family: var(--display); }
+
+  .spinner {
+    display: inline-block; width: 13px; height: 13px; border: 2px solid currentColor;
+    border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite;
+    vertical-align: -2px; margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+  .backlink { display: none; }
+  @media (max-width: 880px) { .backlink { display: inline-block; } }
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/htm/3.1.1/htm.umd.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var h = htm.bind(React.createElement);
+  var useState = React.useState, useEffect = React.useEffect, useMemo = React.useMemo;
+
+  // Two modes from one page. When __REVIEW__ is present the quotations are
+  // baked in and there is no API, no credentials and no way to create one -
+  // that is the build shared for review. Otherwise it talks to bin/serve.js.
+  var REVIEW = window.__REVIEW__ || null;
+
+  var money = function (n) {
+    return n == null ? '—' : '£' + Number(n).toFixed(2);
+  };
+
+  var longDate = function (iso) {
+    if (!iso) return '';
+    var d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // Availability is the whole reason a cheaper part is not always the right
+  // one, so it gets colour: on the shelf, coming soon, or something we do not
+  // recognise and should look at.
+  var SOON = ['HubAfternoon', 'HubTomorrow', 'GroupTomorrow', 'Group72Hours'];
+  function availClass(value, unknown) {
+    if (unknown) return 'pill odd';
+    if (value === 'Immediate') return 'pill now';
+    if (SOON.indexOf(value) !== -1) return 'pill soon';
+    return 'pill odd';
+  }
+
+  function Plate(props) {
+    return h`<span class=${'plate' + (props.small ? ' sm' : '')}>${props.children}</span>`;
+  }
+
+  // ------------------------------------------------------------ picker
+
+  function ServicePicker(props) {
+    var chosen = props.chosen, onChange = props.onChange;
+    var qs = useState(''), q = qs[0], setQ = qs[1];
+    var rs = useState([]), results = rs[0], setResults = rs[1];
+
+    useEffect(function () {
+      var cancelled = false;
+      var term = q.trim();
+      if (term.length < 2) { setResults([]); return; }
+
+      var timer = setTimeout(function () {
+        fetch('/api/categories?q=' + encodeURIComponent(term) + '&limit=40')
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (!cancelled) setResults(d.categories || []); })
+          .catch(function () { if (!cancelled) setResults([]); });
+      }, 160);
+
+      return function () { cancelled = true; clearTimeout(timer); };
+    }, [q]);
+
+    function add(name) {
+      if (chosen.indexOf(name) === -1) onChange(chosen.concat([name]));
+      setQ('');
+      setResults([]);
+    }
+
+    return h`
+      <div>
+        <label for="service-search">Services</label>
+        <input id="service-search" type="search" placeholder="Search 668 categories — try “brake”"
+               value=${q} onInput=${function (e) { setQ(e.target.value); }} autocomplete="off" />
+
+        ${results.length > 0 && h`
+          <div class="results" style=${{ marginTop: '7px' }}>
+            ${results.map(function (name) {
+              var already = chosen.indexOf(name) !== -1;
+              return h`<button type="button" key=${name} disabled=${already}
+                         onClick=${function () { add(name); }}>
+                         ${name}${already ? ' — added' : ''}
+                       </button>`;
+            })}
+          </div>`}
+
+        ${chosen.length > 0 && h`
+          <div class="chosen" style=${{ marginTop: '9px' }}>
+            ${chosen.map(function (name) {
+              return h`<span class="chip" key=${name}>${name}
+                <button type="button" aria-label=${'Remove ' + name}
+                        onClick=${function () { onChange(chosen.filter(function (c) { return c !== name; })); }}>×</button>
+              </span>`;
+            })}
+          </div>`}
+
+        ${chosen.length === 0 && h`<p class="hint" style=${{ marginTop: '7px' }}>
+          Nothing added yet. Names must match GSF exactly — search rather than type.
+        </p>`}
+      </div>`;
+  }
+
+  // -------------------------------------------------------------- form
+
+  function CreateForm(props) {
+    var today = new Date().toISOString().slice(0, 10);
+    var r = useState(''), reg = r[0], setReg = r[1];
+    var d = useState(today), date = d[0], setDate = d[1];
+    var s = useState([]), services = s[0], setServices = s[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    var e = useState(null), error = e[0], setError = e[1];
+
+    function submit(ev) {
+      ev.preventDefault();
+      setBusy(true);
+      setError(null);
+
+      fetch('/api/quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registration: reg, date: date, services: services })
+      })
+        .then(function (res) { return res.json().then(function (body) { return { res: res, body: body }; }); })
+        .then(function (out) {
+          if (!out.res.ok) throw new Error(out.body.message || 'Could not build the quotation.');
+          setServices([]);
+          setReg('');
+          props.onCreated(out.body);
+        })
+        .catch(function (err) { setError(err.message); })
+        .finally(function () { setBusy(false); });
+    }
+
+    // A disabled button with no reason is a dead end, so say what is missing.
+    // One service is enough - there is no minimum.
+    var missing = null;
+    if (!reg.trim()) missing = 'Enter a registration to continue.';
+    else if (!date) missing = 'Pick a date to continue.';
+    else if (services.length === 0) missing = 'Add at least one service to continue.';
+
+    var ready = !missing && !busy;
+
+    return h`
+      <form class="panel" onSubmit=${submit}>
+        <div class="panel-head">New quotation</div>
+        <div class="panel-body">
+          <div class="row2">
+            <div>
+              <label for="registration">Registration</label>
+              <input id="registration" type="text" value=${reg} placeholder="P44PYN"
+                     onInput=${function (ev) { setReg(ev.target.value); }} autocomplete="off" />
+            </div>
+            <div>
+              <label for="quote-date">Date</label>
+              <input id="quote-date" type="date" value=${date}
+                     onInput=${function (ev) { setDate(ev.target.value); }} />
+            </div>
+          </div>
+
+          <${ServicePicker} chosen=${services} onChange=${setServices} />
+
+          ${error && h`<p class="err">${error}</p>`}
+
+          <button class="primary" type="submit" disabled=${!ready}>
+            ${busy
+              ? h`<span><span class="spinner"></span>Pricing ${services.length} ${services.length === 1 ? 'service' : 'services'}…</span>`
+              : 'Create quotation'}
+          </button>
+
+          ${!busy && missing && h`<p class="hint">${missing}</p>`}
+          ${busy && h`<p class="hint">Each service is priced against GSF in turn, so this takes a few seconds.</p>`}
+        </div>
+      </form>`;
+  }
+
+  // -------------------------------------------------------------- list
+
+  function QuoteList(props) {
+    if (props.items.length === 0) {
+      return h`<div class="panel">
+        <div class="panel-head">Quotations</div>
+        <p class="hint" style=${{ padding: '14px' }}>No quotations yet.</p>
+      </div>`;
+    }
+
+    return h`
+      <div class="panel">
+        <div class="panel-head">Quotations · ${props.items.length} · newest first</div>
+        ${props.items.map(function (q) {
+          return h`
+            <button class="qrow" key=${q.number} aria-current=${String(props.selected === q.number)}
+                    onClick=${function () { props.onSelect(q.number); }}>
+              <span class="qrow-top">
+                <span class="qnum">${q.number}</span>
+                <${Plate} small=${true}>${q.registration}<//>
+                <span class="qdate">${longDate(q.date)}</span>
+              </span>
+              <span class="qveh">${q.vehicle || 'Vehicle not identified'}</span>
+              <span class="qfoot">
+                <span>${q.services} ${q.services === 1 ? 'line' : 'lines'}</span>
+                ${q.needsReview && h`<span class="pill odd">Review</span>`}
+                <span class="qtotal">${money(q.tradeCost)}</span>
+              </span>
+            </button>`;
+        })}
+      </div>`;
+  }
+
+  // ------------------------------------------------------------ detail
+
+  function Line(props) {
+    var l = props.line;
+
+    if (!l.found) {
+      return h`
+        <tr class="dead">
+          <td class="cat">${l.category}</td>
+          <td colspan="4">
+            Not priced — ${l.reason}
+            ${l.considered > 0 && h`<span class="note">${l.considered} candidates returned, none quotable.</span>`}
+          </td>
+        </tr>`;
+    }
+
+    var odd = Boolean(l.unknownAvailability);
+
+    return h`
+      <tr class=${l.needsReview ? 'flagged' : ''}>
+        <td class="cat">
+          ${l.category}
+          ${l.needsReview && h`<span class="note">⚠ ${l.reviewReason || 'Needs review'}</span>`}
+        </td>
+        <td>
+          ${l.brand}
+          ${l.fallbackUsed && h`<span class="note">Preferred brand unavailable</span>`}
+          <div class="sku">${l.sku}</div>
+          ${l.alternatives && l.alternatives.length > 0 && h`
+            <div class="alts">Also available: ${l.alternatives.map(function (a, i) {
+              return h`<span key=${a.sku}>${i > 0 ? ' · ' : ''}${a.brand} ${money(a.tradePrice)}</span>`;
+            })}</div>`}
+        </td>
+        <td>
+          <span class=${availClass(l.availability, odd)}>${l.availability}</span>
+          ${odd && h`<span class="note">Unrecognised: ${l.unknownAvailability.join(', ')}</span>`}
+          ${l.fitment && l.fitment !== 'N/A' && h`<div class="sku">${l.fitment}</div>`}
+        </td>
+        <td class="num">${money(l.rrp)}</td>
+        <td class="num"><b>${money(l.tradePrice)}</b></td>
+      </tr>`;
+  }
+
+  function QuoteDetail(props) {
+    var q = props.quote;
+    if (!q) {
+      return h`<div class="panel empty">
+        <p>Pick a quotation from the list to see every line, what it cost and why that part was chosen.</p>
+      </div>`;
+    }
+
+    var flagged = (q.lines || []).filter(function (l) { return l.needsReview; }).length;
+
+    return h`
+      <div class="panel">
+        <div class="detail-head">
+          <div>
+            <h2>${q.number}</h2>
+            <div class="meta">
+              <div><${Plate}>${q.registration}<//></div>
+            </div>
+            <div class="meta" style=${{ marginTop: '10px' }}>
+              <div>Vehicle <b>${q.vehicle || 'not identified'}</b></div>
+              <div>Date <b>${longDate(q.date)}</b></div>
+              ${q.vin && h`<div>VIN <b>${q.vin}</b></div>`}
+              ${q.brandPriority && q.brandPriority.length > 0 &&
+                h`<div>Brand preference <b>${q.brandPriority.join(' → ')}</b></div>`}
+            </div>
+          </div>
+          <div class="totals">
+            <span class="cap">Trade cost ex-VAT</span>
+            <span class="big">${money(q.totals && q.totals.tradeCost)}</span>
+            <span class="cap" style=${{ color: 'var(--faint)' }}>
+              RRP ${money(q.totals && q.totals.rrp)}
+            </span>
+          </div>
+        </div>
+
+        ${flagged > 0 && h`
+          <p class="banner" style=${{ margin: '14px 16px 0' }}>
+            <b>${flagged} of ${q.lines.length} ${flagged === 1 ? 'line needs' : 'lines need'} a human decision.</b>${' '}
+            GSF returned more than one fitment group, which means more than one physical
+            size. The catalogue cannot say which one fits, so it has not guessed.
+          </p>`}
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th><th>Part</th><th>Availability</th>
+                <th class="num">RRP</th><th class="num">Trade</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(q.lines || []).map(function (l, i) { return h`<${Line} line=${l} key=${l.category + i} />`; })}
+            </tbody>
+          </table>
+        </div>
+
+        <p class="foot">
+          Priced ${new Date(q.createdAt).toLocaleString('en-GB')}. Prices and stock are a
+          snapshot taken then, not today's. Trade cost is what GSF charges us, ex-VAT —
+          it is not a sell price.
+        </p>
+      </div>`;
+  }
+
+  // --------------------------------------------------------------- app
+
+  function App() {
+    var l = useState(REVIEW ? REVIEW.quotations : []), list = l[0], setList = l[1];
+    var s = useState(null), selected = s[0], setSelected = s[1];
+    var d = useState(null), detail = d[0], setDetail = d[1];
+
+    // Review builds carry every quotation already; live mode fetches headers
+    // for the list and the full document only when one is opened.
+    var summaries = useMemo(function () {
+      if (!REVIEW) return list;
+      return REVIEW.quotations.map(function (q) {
+        return {
+          number: q.number, registration: q.registration, vehicle: q.vehicle,
+          date: q.date, createdAt: q.createdAt,
+          services: (q.totals && q.totals.services) || (q.lines || []).length,
+          tradeCost: (q.totals && q.totals.tradeCost) || 0,
+          needsReview: Boolean(q.needsReview)
+        };
+      });
+    }, [list]);
+
+    function refresh() {
+      if (REVIEW) return;
+      fetch('/api/quotations')
+        .then(function (r) { return r.json(); })
+        .then(function (d2) { setList(d2.quotations || []); })
+        .catch(function () {});
+    }
+
+    useEffect(function () { refresh(); }, []);
+
+    // Open the newest by default, so the page never loads as an empty shell.
+    useEffect(function () {
+      if (!selected && summaries.length > 0) setSelected(summaries[0].number);
+    }, [summaries]);
+
+    useEffect(function () {
+      if (!selected) { setDetail(null); return; }
+
+      if (REVIEW) {
+        setDetail(REVIEW.quotations.filter(function (q) { return q.number === selected; })[0] || null);
+        return;
+      }
+
+      var cancelled = false;
+      fetch('/api/quotations/' + encodeURIComponent(selected))
+        .then(function (r) { return r.json(); })
+        .then(function (q) { if (!cancelled) setDetail(q); })
+        .catch(function () {});
+      return function () { cancelled = true; };
+    }, [selected, list]);
+
+    return h`
+      <div class="wrap">
+        <header class="masthead">
+          <h1>GSF Parts Quotations</h1>
+          <span class="sub">${REVIEW ? 'Parts validation · read-only' : 'Version 2'}</span>
+          <span class="spacer"></span>
+          <span class="stamp">Internal — shows trade cost</span>
+        </header>
+
+        ${REVIEW && h`
+          <p class="banner">
+            <b>Read-only snapshot for parts validation.</b>
+            ${REVIEW.quotations.length} quotations, priced ${longDate((REVIEW.generatedAt || '').slice(0, 10))}.
+            Please check that the right part has been chosen for each vehicle — labour and
+            sell pricing are not in this version.
+          </p>`}
+
+        <div class="panes">
+          <div class="rail">
+            ${!REVIEW && h`<${CreateForm} onCreated=${function (q) { refresh(); setSelected(q.number); }} />`}
+            <${QuoteList} items=${summaries} selected=${selected} onSelect=${setSelected} />
+          </div>
+          <${QuoteDetail} quote=${detail} />
+        </div>
+      </div>`;
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(h`<${App} />`);
+})();
+</script>
+<!-- ARTIFACT:END -->
+</body>
+</html>
