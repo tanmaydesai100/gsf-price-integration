@@ -17,6 +17,7 @@ import express from 'express';
 
 import { GsfCategoryMap } from '../src/categories.js';
 import { config } from '../src/config.js';
+import { margins } from '../src/margins.js';
 import { GsfClient } from '../src/client.js';
 import { GsfAuthError, GsfBlockedError, GsfError } from '../src/errors.js';
 import { GsfPriceService } from '../src/priceService.js';
@@ -24,6 +25,7 @@ import {
   createQuotation,
   DEFAULT_BRAND_PRIORITY,
   quotations,
+  QUOTATION_STRATEGY,
   sellPrice,
   updateQuotation,
 } from '../src/quotations.js';
@@ -76,16 +78,18 @@ app.get('/api/options', async (req, res, next) => {
       String(registration),
       String(category),
       DEFAULT_BRAND_PRIORITY,
+      QUOTATION_STRATEGY,
     );
 
     // The picker is a screen a customer can end up looking at, so it carries
     // the quoted price only. Cost stays server-side.
+    const percent = await margins.forCategory(String(category));
+
     res.json({
       ...found,
-      markupPercent: config.markupPercent,
       options: found.options.map(({ tradePrice, alternatives, ...option }) => ({
         ...option,
-        sellPrice: sellPrice(tradePrice, config.markupPercent),
+        sellPrice: sellPrice(tradePrice, percent),
       })),
     });
   } catch (error) {

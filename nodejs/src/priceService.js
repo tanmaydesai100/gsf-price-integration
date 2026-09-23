@@ -11,6 +11,7 @@ import { cache } from './cache.js';
 import { GsfCategoryMap } from './categories.js';
 import { GsfClient } from './client.js';
 import { config } from './config.js';
+import { GsfError } from './errors.js';
 
 /**
  * Sooner is better.
@@ -33,6 +34,25 @@ const AVAILABILITY_RANK = {
 
 /** Between GroupTomorrow and Group72Hours. See the note above. */
 const UNKNOWN_AVAILABILITY_RANK = 4;
+
+/**
+ * Units GSF can actually supply, across every location.
+ *
+ * NOT from `isOutOfStock`: that field is false even on parts whose
+ * `availability` reads "OutOfStock", so it cannot be trusted. The availability
+ * string is the authoritative signal and is stricter than the raw counts - GSF
+ * blocks some parts that still show hub stock - so it stays the gate, and this
+ * is only used to check a quantity can be met.
+ */
+export function stockTotal(part) {
+  return (
+    (part.localStock ?? 0) +
+    (part.hubStock ?? 0) +
+    (part.rdcStock ?? 0) +
+    (part.companyStock ?? 0) +
+    (part.imprestStock ?? 0)
+  );
+}
 
 const normaliseReg = (reg) => String(reg).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
@@ -101,14 +121,31 @@ export class GsfPriceService {
     const key = `gsf:parts:${reg}:${componentId}`;
 
     const call = async () => {
-      // 1. Resolve the registration. In testing the vrm header alone was
-      //    enough for vehicles already in the account's history, but that was
-      //    never proven for a brand-new reg - so we always do this.
-      //    Read-only lookup; failures here are not fatal.
+      // 1. Resolve the registration.
+      //
+      //    An unknown registration does NOT come back as an error: GSF answers
+      //    HTTP 200 with a body of literally `null`. Carrying on regardless
+      //    then makes /parts/api/parts return a 500, which reads like their
+      //    server is broken when the real problem is the registration. So the
+      //    body is checked, not just the status.
+      //
+      //    A transport failure stays non-fatal - the vrm request header alone
+      //    has been enough for vehicles already in the account's history.
+      // undefined means the call never completed; null means GSF answered
+      // and said it does not know this registration. They need different
+      // handling, so they must stay distinguishable.
+      let identified;
       try {
-        await this.client.postJson('/vrm/api', { vrm: reg });
+        identified = (await this.client.postJson('/vrm/api', { vrm: reg })).json();
       } catch (error) {
         console.error(`gsf: /vrm/api failed (continuing): ${error.message}`);
+      }
+
+      if (identified !== undefined && identified?.statusCode !== 'Ok') {
+        throw new GsfError(
+          `GSF does not recognise the registration "${reg}". Check the registration, ` +
+            'or look the vehicle up on TradeHub directly to confirm it is in their data.',
+        );
       }
 
       // 2. Parts, pricing and stock.
@@ -160,14 +197,21 @@ export function select(payload, brand, fitment, prefer) {
   // Distinct fitment groups = distinct physical SIZES. More than one and the
   // catalogue cannot tell us which fits: that is a human decision.
   const groups = [...new Set(inStock.map((p) => p.groupedPartNumber ?? ''))];
-  const needsReview = groups.length > 1;
+
+  // Under 'highest' we do not separate positions or sizes at all, so the thing
+  // worth saying is simply that a choice existed - the parts controller checks
+  // which one the vehicle actually needs.
+  const needsReview = prefer === 'highest' ? inStock.length > 1 : groups.length > 1;
 
   inStock.sort(sorter(prefer));
 
   // `brand` is a preference in PRIORITY ORDER: try MANN-FILTER, then BOSCH,
   // then fall back to whatever is soonest. The first brand with anything
   // quotable wins outright - we do not compare across brands on price.
-  const wanted = brand == null ? [] : [brand].flat().filter(Boolean);
+  //
+  // 'highest' ignores brand entirely: the point is to quote the dearest part
+  // that fits, whoever makes it.
+  const wanted = prefer === 'highest' || brand == null ? [] : [brand].flat().filter(Boolean);
   let preferred = [];
   let matchedBrand = null;
 
@@ -193,8 +237,10 @@ export function select(payload, brand, fitment, prefer) {
   ];
 
   const alternatives = inStock
-    .filter(
-      (p) => (p.groupedPartNumber ?? '') === (chosen.groupedPartNumber ?? '') && p.sku !== chosen.sku,
+    .filter((p) =>
+      prefer === 'highest'
+        ? p.sku !== chosen.sku
+        : (p.groupedPartNumber ?? '') === (chosen.groupedPartNumber ?? '') && p.sku !== chosen.sku,
     )
     .map((p) => ({
       sku: p.sku,
@@ -224,7 +270,9 @@ export function select(payload, brand, fitment, prefer) {
     stock: {
       local: chosen.localStock ?? null,
       hub: chosen.hubStock ?? null,
+      rdc: chosen.rdcStock ?? null,
       company: chosen.companyStock ?? null,
+      total: stockTotal(chosen),
     },
 
     fitment: chosen.fitment ?? null,
@@ -237,11 +285,17 @@ export function select(payload, brand, fitment, prefer) {
     fallbackUsed: wanted.length > 0 && preferred.length === 0,
     unknownAvailability: unknownAvailability.length > 0 ? unknownAvailability : null,
 
+    choices: inStock.length,
+
     needsReview,
-    reviewReason: needsReview
-      ? `${groups.length} distinct ${String(fitment || 'compatible').toLowerCase()} fitment groups ` +
-        'returned - the correct size cannot be determined from the catalogue data.'
-      : null,
+    reviewReason: !needsReview
+      ? null
+      : prefer === 'highest'
+        ? `There is a choice of more than one part that fits this model - ${inStock.length} ` +
+          `options across ${groups.length} ${groups.length === 1 ? 'fitment' : 'fitments'}. ` +
+          'The dearest has been quoted; please confirm which one this vehicle needs.'
+        : `${groups.length} distinct ${String(fitment || 'compatible').toLowerCase()} fitment groups ` +
+          'returned - the correct size cannot be determined from the catalogue data.',
 
     alternatives,
   };
@@ -278,7 +332,7 @@ export function options(payload, brand, prefer) {
   for (const part of inStock) {
     // Position and variant together identify one real choice. Missing values
     // still form a group of their own rather than being dropped.
-    const key = `${part.fitment ?? ''} ${part.groupedPartNumber ?? ''}`;
+    const key = `${part.fitment ?? ''}\u0000${part.groupedPartNumber ?? ''}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(part);
   }
@@ -449,6 +503,12 @@ function pickFrom(sorted, brand) {
 
 function sorter(prefer) {
   const rank = (p) => AVAILABILITY_RANK[p.availability] ?? UNKNOWN_AVAILABILITY_RANK;
+
+  // 'highest' quotes the dearest part that can actually be supplied, and lets
+  // the parts controller decide. Availability only breaks a tie on price.
+  if (prefer === 'highest') {
+    return (a, b) => b.customerPrice - a.customerPrice || rank(a) - rank(b);
+  }
 
   if (prefer === 'price') {
     return (a, b) => a.customerPrice - b.customerPrice || rank(a) - rank(b);

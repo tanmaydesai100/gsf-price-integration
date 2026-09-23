@@ -269,6 +269,7 @@
   .pill.odd { background: var(--flag-wash); color: var(--flag); }
 
   .note { font-size: 12px; color: var(--flag); margin-top: 5px; display: block; }
+  .short { font-size: 12px; color: var(--bad); font-weight: 600; margin-top: 4px; display: block; }
   .alts { font-size: 12px; color: var(--soft); margin-top: 6px; }
   .alts span { font-family: var(--mono); }
 
@@ -286,6 +287,25 @@
     padding: 2px 4px; cursor: pointer; border-radius: 3px;
   }
   .drop:hover { color: var(--bad); background: var(--raised); }
+
+  .pricecell { display: inline-flex; align-items: center; gap: 5px; justify-content: flex-end; }
+  .editprice {
+    background: none; border: 0; padding: 2px 4px; cursor: pointer; border-radius: 3px;
+    color: var(--faint); font-size: 12px; font-family: var(--body);
+  }
+  .editprice:hover { color: var(--accent); background: var(--raised); }
+  .priceform { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
+  .priceform input {
+    width: 82px; padding: 4px 6px; font: 13px var(--mono); text-align: right;
+    color: var(--ink); background: var(--ground);
+    border: 1px solid var(--accent); border-radius: 3px;
+  }
+  .priceform button { padding: 4px 7px; font-size: 12px; }
+  .edited { font-family: var(--display); font-size: 9px; font-weight: 700;
+            letter-spacing: 0.07em; text-transform: uppercase; color: var(--flag);
+            display: block; margin-top: 2px; }
+  .revert { background: none; border: 0; padding: 0; cursor: pointer; color: var(--soft);
+            font-size: 11px; text-decoration: underline; font-family: var(--body); }
 
   .editbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
              padding: 12px 16px; border-top: 1px solid var(--line); }
@@ -403,32 +423,35 @@
             '&category=' + encodeURIComponent(name))
         .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
         .then(function (out) {
-          if (!out.ok) throw new Error(out.body.message || 'Could not load fitments.');
+          if (!out.ok) throw new Error(out.body.message || 'Could not price that category.');
           var list = out.body.options || [];
 
           if (list.length === 0) {
             setOerr('No priced, in-stock part for “' + name + '” on this vehicle.');
             return;
           }
-          if (list.length === 1) {
-            addOptions(name, list);
-            return;
-          }
 
-          setOpts({ category: name, list: list });
-          setTicked({});
+          // Dearest first, and the quotation itself notes that a choice existed.
+          var dearest = list.slice().sort(function (a, b) {
+            return (b.sellPrice || 0) - (a.sellPrice || 0);
+          })[0];
+
+          addOptions(name, [dearest], list.length);
         })
         .catch(function (err) { setOerr(err.message); })
         .finally(function () { setLoading(false); });
     }
 
-    function addOptions(category, list) {
+    function addOptions(category, list, choices) {
       var additions = list
-        .filter(function (o) { return !chosen.some(function (c) { return c.group === o.group; }); })
+        .filter(function (o) { return !chosen.some(function (c) { return c.category === category; }); })
         .map(function (o) {
           return {
-            category: category, group: o.group, label: o.label,
-            brand: o.brand, sellPrice: o.sellPrice, availability: o.availability
+            // group stays null: the server picks the dearest fitting part and
+            // records how many there were to choose from.
+            category: category, group: null, label: o.label,
+            brand: o.brand, sellPrice: o.sellPrice, availability: o.availability,
+            choices: choices || list.length
           };
         });
 
@@ -505,7 +528,9 @@
           <div class="picked" style=${{ marginTop: '9px' }}>
             ${chosen.map(function (c) {
               return h`<span class="picked-row" key=${c.group || c.category}>
-                <span class="lbl">${c.label || c.category}</span>
+                <span class="lbl">
+                  ${c.category}${c.choices > 1 ? ' · ' + c.choices + ' to choose from' : ''}
+                </span>
                 <span class="amt">${money(c.sellPrice)}</span>
                 <button type="button" aria-label=${'Remove ' + (c.label || c.category)}
                         onClick=${function () {
@@ -516,8 +541,8 @@
           </div>`}
 
         ${chosen.length === 0 && !opts && h`<p class="hint" style=${{ marginTop: '7px' }}>
-          Search a category, then pick the fitment you want. A category with only one
-          fitment is added straight away.
+          Search a category to add it. The dearest part that fits is quoted, and the
+          quotation notes where there was more than one to choose from.
         </p>`}
       </div>`;
   }
@@ -673,9 +698,14 @@
         </td>
         <td>
           <span class=${availClass(l.availability, odd)}>${l.availability}</span>
+          ${l.stock && l.stock.total != null && h`
+            <div class="sku">${l.stock.total} available</div>`}
           ${odd && h`<span class="note">Unrecognised: ${l.unknownAvailability.join(', ')}</span>`}
         </td>
         <td class="num">
+          ${l.stockShortfall && h`<span class="short">
+            Only ${l.stockShortfall.available} in stock
+          </span>`}
           ${edit
             ? h`<span class="stepper">
                   <button type="button" aria-label="One fewer" disabled=${qty <= 1}
@@ -686,7 +716,34 @@
                 </span>`
             : qty}
         </td>
-        <td class="num">${money(l.sellPrice)}</td>
+        <td class="num">
+          ${props.editingPrice
+            ? h`<span class="priceform">
+                  <input type="number" step="0.01" min="0" autoFocus
+                         id=${'price-' + (l.group || l.category)}
+                         defaultValue=${l.sellPrice}
+                         onKeyDown=${function (ev) {
+                           if (ev.key === 'Enter') props.onPrice(ev.target.value);
+                           if (ev.key === 'Escape') props.onPriceCancel();
+                         }} />
+                  <button type="button" class="primary"
+                          onClick=${function (ev) {
+                            props.onPrice(ev.target.closest('.priceform').querySelector('input').value);
+                          }}>Save</button>
+                  <button type="button" class="ghost" onClick=${props.onPriceCancel}>Cancel</button>
+                </span>`
+            : h`<span class="pricecell">
+                  <span>${money(l.sellPrice)}</span>
+                  ${edit && h`<button type="button" class="editprice" title="Change this price"
+                                      aria-label=${'Change the price of ' + l.category}
+                                      onClick=${props.onPriceEdit}>Edit</button>`}
+                </span>`}
+          ${l.priceEdited && h`<span class="edited">
+            Price set by hand
+            ${edit && h` · <button type="button" class="revert"
+                              onClick=${function () { props.onPrice(null); }}>undo</button>`}
+          </span>`}
+        </td>
         <td class="num"><b>${money((l.sellPrice || 0) * qty)}</b></td>
         ${edit && h`<td class="num">
           <button type="button" class="drop" aria-label=${'Remove ' + l.category}
@@ -700,6 +757,7 @@
     var bs = useState(false), saving = bs[0], setSaving = bs[1];
     var es = useState(null), error = es[0], setError = es[1];
     var as = useState(false), adding = as[0], setAdding = as[1];
+    var ps = useState(null), pricing = ps[0], setPricing = ps[1];
 
     // Chris's copy is a record of what was quoted, so it is never editable.
     var editable = !REVIEW && Boolean(q);
@@ -733,6 +791,16 @@
       if (quantity < 1) return;
       save(q.lines.map(function (l, i) {
         return i === index ? Object.assign(spec(l), { quantity: quantity }) : spec(l);
+      }));
+    }
+
+    // null puts the calculated price back; a number sets it.
+    function setPrice(index, value) {
+      setPricing(null);
+      save(q.lines.map(function (l, i) {
+        return i === index
+          ? Object.assign(spec(l), { sellPrice: value === null ? null : value })
+          : spec(l);
       }));
     }
 
@@ -818,7 +886,11 @@
             <tbody>
               ${(q.lines || []).map(function (l, i) {
                 return h`<${Line} line=${l} key=${l.category + (l.group || '') + i} editable=${editable && !saving}
+                           editingPrice=${pricing === i && !saving}
                            onQuantity=${function (n) { setQuantity(i, n); }}
+                           onPriceEdit=${function () { setPricing(i); }}
+                           onPriceCancel=${function () { setPricing(null); }}
+                           onPrice=${function (v) { setPrice(i, v); }}
                            onRemove=${function () { removeLine(i); }} />`;
               })}
             </tbody>

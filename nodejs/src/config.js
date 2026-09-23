@@ -75,7 +75,10 @@ export const config = {
 
   // 'availability' = soonest-available first, then cheapest.
   // 'price'        = cheapest first, then soonest-available.
-  prefer: process.env.GSF_PREFER || 'availability',
+  // 'highest'       dearest part that can be supplied, brand and fitment ignored
+  // 'availability'  soonest-available first, then cheapest
+  // 'price'         cheapest first, then soonest-available
+  prefer: process.env.GSF_PREFER || 'highest',
 
   /*
    * Markup on trade cost, as a percentage, to get the price a customer sees.

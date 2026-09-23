@@ -1,0 +1,17 @@
+{
+    "_note": "Margin applied to what GSF charges us, to get the price a customer sees. Edit this file to change a rate; the server picks up changes without a restart.",
+    "_units": "Percent ADDED to cost. 58.2 means a 10.00 part is quoted at 15.82. Not a share of the sell price.",
+    "_matching": "Keys are GSF category names, lowercased, exactly as data/categories.json spells them. Find one with: node bin/gsf.js categories <search>. Anything not listed here uses defaultPercent.",
+    "defaultPercent": 58.2,
+    "categories": {
+        "engine oil (non-applicated)": 58.2,
+        "engine oils (applicated)": 58.2,
+        "differential oil": 58.2,
+        "automatic transmission fluid": 58.2,
+        "power steering fluid": 58.2,
+        "brake fluid": 58.2,
+        "brake fluid (applicated)": 58.2,
+        "engine coolant": 58.2,
+        "antifreeze & coolant additive (applicated)": 58.2
+    }
+}

@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { cache } from './cache.js';
 import { config } from './config.js';
 import { GsfError } from './errors.js';
+import { margins } from './margins.js';
 import { GsfPriceService } from './priceService.js';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -36,6 +37,17 @@ const storeDir = () =>
 
 /** Default brand preference, in priority order. Override per quotation. */
 export const DEFAULT_BRAND_PRIORITY = ['MANN-FILTER', 'BOSCH'];
+
+/**
+ * How a quotation picks a part: the dearest one that can actually be supplied,
+ * ignoring brand and fitment, with a note on the line wherever there was more
+ * than one to choose from.
+ *
+ * Set here rather than read from config, because it is the commercial rule for
+ * a quotation - not an operator preference that GSF_PREFER should be able to
+ * change out from under it.
+ */
+export const QUOTATION_STRATEGY = 'highest';
 
 const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''));
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -47,11 +59,62 @@ export const sellPrice = (trade, percent) =>
 const quantityOf = (line) => Math.max(1, Number.parseInt(line?.quantity ?? 1, 10) || 1);
 
 /**
+ * Whether GSF can supply the quantity being quoted.
+ *
+ * Passing the availability gate only means at least one exists. Quoting three
+ * of a part with one unit in the whole company is the failure this catches -
+ * and the dearest part, which is what we now quote, is routinely the thinnest
+ * stocked.
+ */
+function stockShortfall(line) {
+  const available = line?.stock?.total;
+  if (!line?.found || available == null) return null;
+
+  const wanted = quantityOf(line);
+  return wanted > available ? { wanted, available } : null;
+}
+
+/**
+ * A price typed by hand on a quotation.
+ *
+ * The margin file decides what a part is normally quoted at; this is the
+ * override for the job in front of you - matching a competitor, a goodwill
+ * discount, a price already promised on the phone.
+ *
+ * `listPrice` keeps what the margin would have produced, so the line can say
+ * it was changed and can be put back.
+ *
+ *   number  set the price
+ *   null    put it back to the calculated one
+ *   absent  leave it alone
+ */
+function applyPriceOverride(line, override) {
+  if (override === undefined) return line;
+
+  if (override === null) {
+    if (line.listPrice == null) return line;
+    return { ...line, sellPrice: line.listPrice, listPrice: null, priceEdited: false };
+  }
+
+  const value = Number.parseFloat(override);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new GsfError('A price must be a number, and not negative.');
+  }
+
+  return {
+    ...line,
+    listPrice: line.listPrice ?? line.sellPrice,
+    sellPrice: round2(value),
+    priceEdited: true,
+  };
+}
+
+/**
  * Totals are computed from the lines every time rather than stored and
  * adjusted, so editing a quotation cannot leave the total disagreeing with
  * what is on it.
  */
-function totalsFor(lines, markup) {
+function totalsFor(lines) {
   const quoted = lines.filter((l) => l.found);
 
   return {
@@ -65,7 +128,6 @@ function totalsFor(lines, markup) {
     // What the customer is quoted, ex-VAT.
     sell: round2(quoted.reduce((sum, l) => sum + (l.sellPrice ?? 0) * quantityOf(l), 0)),
     rrp: round2(quoted.reduce((sum, l) => sum + (l.rrp ?? 0) * quantityOf(l), 0)),
-    markupPercent: markup,
   };
 }
 
@@ -129,20 +191,27 @@ export const quotations = {
 function normalise(quotation) {
   if (!quotation || !Array.isArray(quotation.lines)) return quotation;
 
-  const markupPercent = quotation.markupPercent ?? config.markupPercent;
+  const lines = quotation.lines.map((line) => {
+    // A line's own rate first; then the single rate older quotations stored
+    // for the whole document; then the configured default.
+    const percent = line.marginPercent ?? quotation.markupPercent ?? config.markupPercent;
 
-  const lines = quotation.lines.map((line) => ({
-    ...line,
-    quantity: Math.max(1, Number.parseInt(line.quantity ?? 1, 10) || 1),
-    sellPrice: line.sellPrice ?? (line.found ? sellPrice(line.tradePrice, markupPercent) : null),
-  }));
+    return {
+      ...line,
+      quantity: Math.max(1, Number.parseInt(line.quantity ?? 1, 10) || 1),
+      marginPercent: percent,
+      // A hand-set price wins over the margin, always.
+      sellPrice: line.sellPrice ?? (line.found ? sellPrice(line.tradePrice, percent) : null),
+      priceEdited: Boolean(line.priceEdited),
+      stockShortfall: stockShortfall({ ...line, quantity: line.quantity ?? 1 }),
+    };
+  });
 
   return {
     ...quotation,
-    markupPercent,
     lines,
-    totals: totalsFor(lines, markupPercent),
-    needsReview: lines.some((l) => l.needsReview),
+    totals: totalsFor(lines),
+    needsReview: lines.some((l) => l.needsReview || l.stockShortfall),
   };
 }
 
@@ -194,7 +263,7 @@ export async function createQuotation({
   services,
   brands = DEFAULT_BRAND_PRIORITY,
   fitment = null,
-  prefer = null,
+  prefer = QUOTATION_STRATEGY,
   service = null,
 } = {}) {
   if (!registration || !String(registration).trim()) {
@@ -228,10 +297,14 @@ export async function createQuotation({
     lines.push(await priceLine(prices, registration, entry, brands, fitment, prefer));
   }
 
-  const markupPercent = config.markupPercent;
+  // The rate comes from data/margins.json per category, and is STORED ON THE
+  // LINE. Editing the file later cannot move a quotation already given out.
   for (const line of lines) {
+    const percent = await margins.forCategory(line.category);
     line.quantity = 1;
-    line.sellPrice = line.found ? sellPrice(line.tradePrice, markupPercent) : null;
+    line.marginPercent = percent;
+    line.sellPrice = line.found ? sellPrice(line.tradePrice, percent) : null;
+    line.stockShortfall = stockShortfall(line);
   }
 
   const vehicle = lines.find((l) => l.vehicle)?.vehicle ?? null;
@@ -246,12 +319,11 @@ export async function createQuotation({
     vin: lines.find((l) => l.vin)?.vin ?? null,
 
     brandPriority: [brands].flat().filter(Boolean),
-    markupPercent,
     lines,
 
-    totals: totalsFor(lines, markupPercent),
+    totals: totalsFor(lines),
 
-    needsReview: lines.some((l) => l.needsReview),
+    needsReview: lines.some((l) => l.needsReview || l.stockShortfall),
   };
 
   return quotations.put(quotation);
@@ -349,6 +421,10 @@ async function priceLine(prices, registration, entry, brands, fitment, prefer) {
       brandSelected: r.brandSelected ?? null,
       fallbackUsed: r.fallbackUsed,
 
+      // How many parts were on offer - the parts controller wants the count,
+      // not just that there was more than one.
+      choices: r.choices ?? null,
+
       needsReview: r.needsReview,
       reviewReason: r.reviewReason,
       unknownAvailability: r.unknownAvailability ?? null,
@@ -395,7 +471,6 @@ export async function updateQuotation(number, { lines: wanted, service = null } 
   if (!Array.isArray(wanted)) throw new GsfError('lines must be an array.');
   if (wanted.length === 0) throw new GsfError('A quotation needs at least one line.');
 
-  const markupPercent = existing.markupPercent ?? config.markupPercent;
   const keyOf = (line) => `${line.category}\u0000${line.group ?? ''}`;
   const byKey = new Map(existing.lines.map((line) => [keyOf(line), line]));
 
@@ -410,25 +485,28 @@ export async function updateQuotation(number, { lines: wanted, service = null } 
     const kept = byKey.get(keyOf(entry));
 
     if (kept) {
-      next.push({
-        ...kept,
-        quantity,
-        sellPrice: kept.sellPrice ?? (kept.found ? sellPrice(kept.tradePrice, markupPercent) : null),
-      });
+      const line = applyPriceOverride({ ...kept, quantity }, entry.sellPrice);
+      line.stockShortfall = stockShortfall(line);
+      next.push(line);
       continue;
     }
 
-    const priced = await priceLine(prices, existing.registration, entry, brands, null, null);
+    const priced = await priceLine(prices, existing.registration, entry, brands, null, QUOTATION_STRATEGY);
+    const percent = await margins.forCategory(priced.category);
+
     priced.quantity = quantity;
-    priced.sellPrice = priced.found ? sellPrice(priced.tradePrice, markupPercent) : null;
-    next.push(priced);
+    priced.marginPercent = percent;
+    priced.sellPrice = priced.found ? sellPrice(priced.tradePrice, percent) : null;
+    const adjusted = applyPriceOverride(priced, entry.sellPrice);
+    adjusted.stockShortfall = stockShortfall(adjusted);
+    next.push(adjusted);
   }
 
   return quotations.put({
     ...existing,
     lines: next,
-    totals: totalsFor(next, markupPercent),
-    needsReview: next.some((l) => l.needsReview),
+    totals: totalsFor(next),
+    needsReview: next.some((l) => l.needsReview || l.stockShortfall),
     updatedAt: new Date().toISOString(),
   });
 }
@@ -456,14 +534,14 @@ export async function exportForReview({ includeCost = false } = {}) {
 }
 
 function withoutCost(quotation) {
-  const { tradeCost, rrp, markupPercent, ...totals } = quotation.totals ?? {};
+  const { tradeCost, rrp, ...totals } = quotation.totals ?? {};
   const { markupPercent: rate, ...rest } = quotation;
 
   return {
     ...rest,
     totals,
     lines: (quotation.lines ?? []).map((line) => {
-      const { tradePrice, rrp: lineRrp, alternatives, ...kept } = line;
+      const { tradePrice, rrp: lineRrp, marginPercent, listPrice, alternatives, ...kept } = line;
       return {
         ...kept,
         // Brands stay - Chris needs them to judge the part - but not prices.

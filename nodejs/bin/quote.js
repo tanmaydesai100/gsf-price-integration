@@ -17,6 +17,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import { GsfAuthError, GsfBlockedError, GsfError } from '../src/errors.js';
+import { margins } from '../src/margins.js';
 import {
   createQuotation,
   DEFAULT_BRAND_PRIORITY,
@@ -38,6 +39,8 @@ GSF quotations
   quote show <number>           One quotation in full
   quote export                  Write the read-only review page
       --out=build/review.html
+
+  quote margins [search]        Margin per category, from data/margins.json
 `.trim();
 
 const options = {
@@ -168,6 +171,39 @@ async function cmdExport(values) {
   return 0;
 }
 
+async function cmdMargins(args) {
+  const { defaultPercent, categories } = await margins.all();
+  const [search] = args;
+
+  const rows = Object.entries(categories)
+    .filter(([name]) => !search || name.includes(String(search).toLowerCase()))
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  console.log(
+    `Default ${defaultPercent}% added to cost. ` +
+      `${Object.keys(categories).length} of 668 categories set explicitly; the rest use the default.`,
+  );
+
+  if (rows.length === 0) {
+    console.log(
+      search
+        ? `No explicit rate matches "${search}" - it uses the default ${defaultPercent}%.`
+        : "No explicit rates set.",
+    );
+    return 0;
+  }
+
+  console.table(
+    rows.map(([name, percent]) => ({
+      Category: name,
+      "Margin %": percent,
+      "A 10.00 part sells at": Number(10 * (1 + percent / 100)).toFixed(2),
+      Note: percent === defaultPercent ? "" : "differs from default",
+    })),
+  );
+  return 0;
+}
+
 async function main() {
   const { values, positionals } = parseArgs({
     args: process.argv.slice(2),
@@ -188,6 +224,8 @@ async function main() {
       return cmdList();
     case 'show':
       return cmdShow(rest);
+    case 'margins':
+      return cmdMargins(rest);
     case 'export':
       return cmdExport(values);
     default:
