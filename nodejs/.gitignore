@@ -4,3 +4,4 @@ node_modules/
 data/quotations/
 build/
 .jlr-profile/
+jlr/.jlr-profile/

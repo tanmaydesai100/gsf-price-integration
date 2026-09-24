@@ -75,6 +75,9 @@ stops with an interactive-login error; in that case use the optional
 `JLR_SESSION_COOKIE` or `JLR_APIGEE_TOKEN` runtime overrides. Do not paste
 secrets into the React UI or commit them.
 
+The persistent browser profile defaults to `jlr/.jlr-profile`, keeping all JLR
+runtime state inside this directory. It is ignored by Git.
+
 The catalogue request is implemented in `src/catalogue.js`. The login/session
 flow is deliberately not guessed: it uses JLR ForgeRock and must be connected
 using the approved session mechanism before calling the catalogue service.

@@ -21,7 +21,7 @@ export const config = {
   authBaseUrl: process.env.JLR_AUTH_BASE_URL || 'https://enterprise.jaguarlandrover.com/business/auth',
   authRealm: process.env.JLR_AUTH_REALM || 'enterprise',
   authTree: process.env.JLR_AUTH_TREE || 'iepc-login',
-  profileDir: process.env.JLR_PROFILE_DIR || '.jlr-profile',
+  profileDir: process.env.JLR_PROFILE_DIR || 'jlr/.jlr-profile',
   browserHeadless: process.env.JLR_BROWSER_HEADLESS === 'true',
   loginTimeout: int(process.env.JLR_LOGIN_TIMEOUT, 120) * 1000,
   timeout: int(process.env.JLR_TIMEOUT, 60) * 1000,
