@@ -311,6 +311,15 @@
 
   .backlink { display: none; }
   @media (max-width: 880px) { .backlink { display: inline-block; } }
+
+  /* JLR is an independent supplier test surface, separate from GSF quotes. */
+  .jlr-panel { margin-bottom: 20px; border-color: #b9c9e6; }
+  .jlr-panel .panel-head { color: #31588f; }
+  .jlr-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+  .jlr-results { margin-top: 14px; overflow-x: auto; }
+  .jlr-results table { min-width: 720px; }
+  .jlr-status { color: var(--soft); font-size: 13px; }
+  @media (max-width: 700px) { .jlr-form { grid-template-columns: 1fr; } }
 </style>
 
 <div id="root"></div>
@@ -848,6 +857,90 @@
       </div>`;
   }
 
+  // ------------------------------------------------------------- JLR tester
+
+  function JlrPartRow(part) {
+    var features = (part.features || []).join(', ') || (part.comments || []).join(', ') || '—';
+    var price = part.unitPrice == null
+      ? '—'
+      : (part.currency || '') + ' ' + Number(part.unitPrice).toFixed(2);
+
+    return h`<tr key=${part.partNumber + (part.callout || '')}>
+      <td class="sku">${part.partNumber || '—'}</td>
+      <td>${part.callout || '—'}</td>
+      <td>${part.description || '—'}</td>
+      <td>${features}</td>
+      <td class="num">${part.quantity}</td>
+      <td class="num">${price}</td>
+    </tr>`;
+  }
+
+  function JlrCataloguePanel() {
+    var g = useState(''), registration = g[0], setRegistration = g[1];
+    var c = useState('27576'), catalogueId = c[0], setCatalogueId = c[1];
+    var r = useState(null), result = r[0], setResult = r[1];
+    var e = useState(null), error = e[0], setError = e[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+
+    function lookup(ev) {
+      ev.preventDefault();
+      setBusy(true);
+      setError(null);
+      setResult(null);
+
+      fetch('/api/jlr/catalogue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ catalogueId: catalogueId, registration: registration })
+      })
+        .then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          });
+        })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'JLR lookup failed.');
+          setResult(out.body);
+        })
+        .catch(function (err) { setError(err.message); })
+        .finally(function () { setBusy(false); });
+    }
+
+    return h`
+      <section class="panel jlr-panel">
+        <div class="panel-head">JLR catalogue test</div>
+        <div class="panel-body">
+          <p class="hint">Independent JLR lookup. Enter the registration and page ID. The server must have a current JLR session.</p>
+          <form class="jlr-form" onSubmit=${lookup}>
+            <div>
+              <label for="jlr-registration">Registration</label>
+              <input id="jlr-registration" type="text" value=${registration} placeholder="WL61RZO"
+                     onInput=${function (ev) { setRegistration(ev.target.value); }} />
+            </div>
+            <div>
+              <label for="jlr-catalogue-id">Catalogue page ID</label>
+              <input id="jlr-catalogue-id" type="text" value=${catalogueId} placeholder="27576"
+                     onInput=${function (ev) { setCatalogueId(ev.target.value); }} />
+            </div>
+            <button class="primary" type="submit" disabled=${busy || !registration.trim() || !catalogueId.trim()}>
+              ${busy ? 'Loading…' : 'Fetch JLR parts'}
+            </button>
+          </form>
+          ${error && h`<p class="err">${error}</p>`}
+          ${result && h`
+            <div class="jlr-results">
+              <p class="jlr-status">${result.category || 'JLR catalogue'} · ${result.parts.length} parts returned</p>
+              <table>
+                <thead><tr><th>Part number</th><th>Callout</th><th>Description</th><th>Features</th><th>Qty</th><th>Unit price</th></tr></thead>
+                <tbody>
+                  ${result.parts.map(JlrPartRow)}
+                </tbody>
+              </table>
+            </div>`}
+        </div>
+      </section>`;
+  }
+
   // --------------------------------------------------------------- app
 
   function App() {
@@ -913,6 +1006,8 @@
             Please check that the right part has been chosen for each vehicle — labour and
             sell pricing are not in this version.
           </p>`}
+
+        ${!REVIEW && h`<${JlrCataloguePanel} />`}
 
         <div class="panes">
           <div class="rail">

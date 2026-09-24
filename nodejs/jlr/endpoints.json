@@ -1,0 +1,30 @@
+{
+  "website": "https://www.jlrepc.com/jlr-epc/en-GB/home",
+  "login": "https://enterprise.jaguarlandrover.com/business/?realm=b2b&authIndexType=service&authIndexValue=iepc-login",
+  "catalogue": {
+    "hierarchyPaths": [
+      "/mobify/proxy/apigee/iepc/catalogue/api/v1/majorSections",
+      "/mobify/proxy/apigee/iepc/catalogue/api/v1/nextLevelHierarchies"
+    ],
+    "parts": {
+      "method": "POST",
+      "path": "/mobify/proxy/apigee/iepc/catalogue/api/v1/catEntries",
+      "body": {
+        "catHieId": "catalogue/page id",
+        "vin": "selected vehicle VIN",
+        "featureCodes": [],
+        "filter": true,
+        "langCode": "EN",
+        "marketCode": "GB",
+        "parentApplicable": true,
+        "retailerCode": "configured retailer code",
+        "userId": "configured JLR user id",
+        "userType": "independent",
+        "userRole": "sponsored",
+        "retailerId": "configured retailer id"
+      },
+      "responsePartsPath": "responseObject.catalogueEntries",
+      "status": "confirmed-from-authorised-browser-session"
+    }
+  }
+}

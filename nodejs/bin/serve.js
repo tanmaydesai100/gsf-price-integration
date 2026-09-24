@@ -20,6 +20,8 @@ import { config } from '../src/config.js';
 import { GsfClient } from '../src/client.js';
 import { GsfAuthError, GsfBlockedError, GsfError } from '../src/errors.js';
 import { GsfPriceService } from '../src/priceService.js';
+import { JlrCatalogue } from '../jlr/src/catalogue.js';
+import { JlrClient } from '../jlr/src/client.js';
 import {
   createQuotation,
   DEFAULT_BRAND_PRIORITY,
@@ -36,6 +38,7 @@ const PORT = Number.parseInt(process.env.PORT ?? '3000', 10);
 const client = new GsfClient();
 const categories = new GsfCategoryMap(client);
 const prices = new GsfPriceService(client, categories);
+const jlrCatalogue = new JlrCatalogue(new JlrClient());
 
 const app = express();
 app.use(express.json());
@@ -90,6 +93,34 @@ app.get('/api/options', async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+/** Isolated JLR catalogue test endpoint. It does not touch the GSF flow. */
+app.post('/api/jlr/catalogue', async (req, res, next) => {
+  const { catalogueId, registration, featureCodes } = req.body ?? {};
+
+  if (!catalogueId || !registration) {
+    return res.status(422).json({
+      error: 'validation_failed',
+      message: 'catalogueId and registration are required.',
+    });
+  }
+
+  try {
+    const resolved = await jlrCatalogue.resolveRegistration(registration);
+    res.json(
+      {
+        ...resolved,
+        ...(await jlrCatalogue.parts({
+        catalogueId: String(catalogueId),
+        vin: resolved.vin,
+        featureCodes: Array.isArray(featureCodes) ? featureCodes : [],
+        })),
+      },
+    );
+  } catch (error) {
+    res.status(503).json({ error: 'jlr_error', message: error.message });
   }
 });
 
