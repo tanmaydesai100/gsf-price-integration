@@ -1,0 +1,328 @@
+{
+  "_note": "Customer-facing jobs, defined once for every JLR model. A part is named by its callout BASE number - the middle of the engineer number (BJ32-2005-AC -> 2005), which JLR keeps from the Ford system and uses on every model. A callout matches its base exactly or with one trailing letter (19542 matches 19542A and 19542B); a list of bases matches any (oil filter: 6731 spin-on, 6714 cartridge). \"sections\" are phrases for the EPC's section search, which finds the pages in under a second (whole phrase: \"Oil Cooler\" finds \"Oil Cooler And Filter\", \"Oil Filter\" does not). \"pages\" are words the page name must then contain (any one phrase), e.g. front vs rear; they only say where to look, the base decides. \"prefer\" / \"avoid\" are words in a part's description, comments or features that settle a choice JLR leaves open. Confirm a change on real vehicles with `bin/jlr.js check <reg>...`; see jlr/README.md for the catalogues already checked. \"engine\": \"diesel\" marks a part only diesels have - when nothing matches and the pages it searched are for another engine (their names say \"Petrol\"), the line reads 'not on this vehicle' instead of 'missing'. \"require\" is strict: a part without those words is never quoted (wheel bearing: 1104 is a hub with bearing on some models, a bare hub on others). \"qty\" overrides the catalogue quantity (wheel bearings: one side, not the axle pair).",
+  "defaults": {
+    "avoid": [
+      "upgrade"
+    ]
+  },
+  "jobs": {
+    "front_brake_pads": {
+      "label": "Front brake pads",
+      "parts": [
+        {
+          "base": "2001",
+          "name": "Front pad kit",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "front brake discs calipers"
+          ]
+        }
+      ]
+    },
+    "front_pads_discs": {
+      "label": "Front brake pads & discs",
+      "parts": [
+        {
+          "base": "2001",
+          "name": "Front pad kit",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "front brake discs calipers"
+          ]
+        },
+        {
+          "base": "1125",
+          "name": "Front brake disc",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "front brake discs calipers"
+          ]
+        }
+      ]
+    },
+    "rear_brake_pads": {
+      "label": "Rear brake pads",
+      "parts": [
+        {
+          "base": "2M008",
+          "name": "Rear pad kit",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "rear brake discs calipers"
+          ]
+        }
+      ]
+    },
+    "rear_pads_discs": {
+      "label": "Rear brake pads & discs",
+      "parts": [
+        {
+          "base": "2M008",
+          "name": "Rear pad kit",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "rear brake discs calipers"
+          ]
+        },
+        {
+          "base": "2C026",
+          "name": "Rear brake disc",
+          "sections": [
+            "Brake Discs"
+          ],
+          "pages": [
+            "rear brake discs calipers"
+          ]
+        }
+      ]
+    },
+    "brake_fluid_change": {
+      "label": "Brake fluid change",
+      "parts": [
+        {
+          "base": "19542",
+          "name": "Brake fluid",
+          "sections": [
+            "Brake Fluid"
+          ],
+          "pages": [
+            "hydraulic oil brake fluid"
+          ],
+          "prefer": [
+            "1 l"
+          ]
+        }
+      ]
+    },
+    "oil_filter": {
+      "label": "Oil filter",
+      "parts": [
+        {
+          "base": [
+            "6731",
+            "6714"
+          ],
+          "name": "Oil filter",
+          "sections": [
+            "Oil Cooler",
+            "Oil Filter"
+          ],
+          "pages": [
+            "oil cooler filter",
+            "oil filter"
+          ]
+        }
+      ]
+    },
+    "air_filter": {
+      "label": "Air filter",
+      "parts": [
+        {
+          "base": "9601",
+          "name": "Air filter element",
+          "sections": [
+            "Air Cleaner"
+          ],
+          "pages": [
+            "air cleaner"
+          ]
+        }
+      ]
+    },
+    "pollen_filter": {
+      "label": "Pollen filter",
+      "parts": [
+        {
+          "base": "19N619",
+          "name": "Pollen filter",
+          "sections": [
+            "Heater"
+          ],
+          "pages": [
+            "heater air cond internal",
+            "heater air con blower"
+          ]
+        }
+      ]
+    },
+    "spark_plugs": {
+      "label": "Spark plugs",
+      "parts": [
+        {
+          "base": "12405",
+          "name": "Spark plug",
+          "sections": [
+            "Spark Plugs"
+          ],
+          "pages": [
+            "spark plugs",
+            "ignition coil"
+          ]
+        }
+      ]
+    },
+    "front_wiper_blades": {
+      "label": "Front wiper blades",
+      "parts": [
+        {
+          "base": "17528",
+          "name": "Wiper blade",
+          "sections": [
+            "Windscreen Wiper"
+          ],
+          "pages": [
+            "windscreen wiper"
+          ]
+        }
+      ]
+    },
+    "auxiliary_belt": {
+      "label": "Auxiliary drive belt",
+      "parts": [
+        {
+          "base": "8620",
+          "name": "Drive belt",
+          "sections": [
+            "Drive Belts"
+          ],
+          "pages": [
+            "pulleys drive belts"
+          ]
+        }
+      ]
+    },
+    "brake_booster": {
+      "label": "Brake booster",
+      "parts": [
+        {
+          "base": "2005",
+          "name": "Brake booster",
+          "sections": [
+            "Brake Booster"
+          ],
+          "pages": [
+            "brake booster"
+          ]
+        }
+      ]
+    },
+    "fuel_filter": {
+      "label": "Fuel filter",
+      "parts": [
+        {
+          "base": [
+            "9S324",
+            "9155"
+          ],
+          "name": "Fuel filter",
+          "sections": [
+            "Fuel Lines",
+            "Fuel Filter"
+          ],
+          "pages": [
+            "fuel lines",
+            "fuel filter"
+          ],
+          "avoid": [
+            "complete assembly"
+          ],
+          "engine": "diesel"
+        }
+      ]
+    },
+    "glow_plugs": {
+      "label": "Glow plugs",
+      "parts": [
+        {
+          "base": [
+            "12A342",
+            "11A604"
+          ],
+          "name": "Glow plug",
+          "sections": [
+            "Fuel Injectors"
+          ],
+          "pages": [
+            "fuel injectors"
+          ],
+          "engine": "diesel"
+        }
+      ]
+    },
+    "battery": {
+      "label": "Battery",
+      "parts": [
+        {
+          "base": "10655",
+          "name": "Battery",
+          "sections": [
+            "Battery And Mountings"
+          ],
+          "pages": [
+            "battery mountings"
+          ],
+          "avoid": [
+            "usa",
+            "locally sourced"
+          ]
+        }
+      ]
+    },
+    "front_wheel_bearing": {
+      "label": "Front wheel bearing",
+      "parts": [
+        {
+          "base": [
+            "1215",
+            "1225",
+            "1104"
+          ],
+          "name": "Front wheel bearing",
+          "sections": [
+            "Knuckle"
+          ],
+          "pages": [
+            "front knuckle"
+          ],
+          "require": [
+            "bearing"
+          ],
+          "qty": 1
+        }
+      ]
+    },
+    "rear_wheel_bearing": {
+      "label": "Rear wheel bearing",
+      "parts": [
+        {
+          "base": [
+            "1215",
+            "1225",
+            "1104"
+          ],
+          "name": "Rear wheel bearing",
+          "sections": [
+            "Knuckle"
+          ],
+          "pages": [
+            "rear knuckle"
+          ],
+          "require": [
+            "bearing"
+          ],
+          "qty": 1
+        }
+      ]
+    }
+  }
+}

@@ -1,30 +1,97 @@
 {
   "website": "https://www.jlrepc.com/jlr-epc/en-GB/home",
-  "login": "https://enterprise.jaguarlandrover.com/business/?realm=b2b&authIndexType=service&authIndexValue=iepc-login",
-  "catalogue": {
-    "hierarchyPaths": [
-      "/mobify/proxy/apigee/iepc/catalogue/api/v1/majorSections",
-      "/mobify/proxy/apigee/iepc/catalogue/api/v1/nextLevelHierarchies"
+  "auth": {
+    "status": "confirmed-live-2026-09-24 (plain HTTP, no MFA on the account)",
+    "steps": [
+      "GET  {epc}/mobify/proxy/api/shopper/auth/v1/organizations/f_ecom_bjkk_prd/oauth2/authorize?channel_id=jlr-epc&redirect_uri={epc}/callback/forgerock&client_id=d122e7d6-21b2-4e0e-b5f3-8a8e4819dac2&code_challenge=<PKCE>&hint=forgerock-iepc  -> 303 ForgeRock authorize",
+      "POST https://enterprise.jaguarlandrover.com/auth/json/realms/root/realms/b2b/authenticate?authIndexType=service&authIndexValue=iepc-login  (NameCallback + PasswordCallback) -> SSOSession cookie",
+      "GET  ForgeRock authorize with the cookie -> Salesforce idp callback -> {epc}/callback/forgerock?code&usid",
+      "POST .../oauth2/token  grant_type=authorization_code_pkce -> access_token (1800s) + refresh_token",
+      "POST {epc}/apigee-token  Authorization: Bearer <access_token>, body {usid} -> {token}  (the catalogue token)"
     ],
-    "parts": {
+    "catalogueHeaders": {
+      "Authorization": "Bearer <apigee token>",
+      "rdm-transaction-id": "new UUID per request"
+    }
+  },
+  "_note": "Everything here is confirmed against the live EPC (2026-09-24). Request bodies are built in jlr/src/catalogue.js (`bodies`) and match what the EPC front end sends.",
+  "catalogue": {
+    "vinDecode": {
       "method": "POST",
-      "path": "/mobify/proxy/apigee/iepc/catalogue/api/v1/catEntries",
+      "path": "/mobify/proxy/apigee/iepc/catalogue/api/v1/vehicleConfig/vinDecode",
       "body": {
-        "catHieId": "catalogue/page id",
-        "vin": "selected vehicle VIN",
+        "regNum": "plate (or vin: VIN)",
+        "langCode": "EN",
+        "userId": "JLR_EPC_EMAIL",
+        "userType": "independent",
+        "userRole": "sponsored",
+        "retailerId": "JLR_RETAILER_CODE (the sponsoring retailer's partner code)"
+      },
+      "response": "responseObject[]: vin, regNum, catID/catHieID (model catalogue, where the tree starts), catDescription, buildDate, primaryFeatures, minorFeatures",
+      "status": "confirmed"
+    },
+    "nextLevelHierarchies": {
+      "method": "POST",
+      "path": "/mobify/proxy/apigee/iepc/catalogue/api/v1/nextLevelHierarchies",
+      "body": {
+        "vin": "VIN",
+        "catHieId": "parent node (start with catID)",
         "featureCodes": [],
         "filter": true,
         "langCode": "EN",
         "marketCode": "GB",
         "parentApplicable": true,
-        "retailerCode": "configured retailer code",
-        "userId": "configured JLR user id",
+        "userId": "JLR_EPC_EMAIL",
         "userType": "independent",
         "userRole": "sponsored",
-        "retailerId": "configured retailer id"
+        "retailerId": "JLR_RETAILER_CODE (the sponsoring retailer's partner code)"
       },
-      "responsePartsPath": "responseObject.catalogueEntries",
-      "status": "confirmed-from-authorised-browser-session"
+      "response": "responseObject.catalogueHierarchies[]: catHieId, catHieType (2 major, 3 minor, 4 page), catHieDesc, applicableInd. A page answers success:false 'Next level hierarchy is not available.'",
+      "status": "confirmed"
+    },
+    "catEntries": {
+      "method": "POST",
+      "path": "/mobify/proxy/apigee/iepc/catalogue/api/v1/catEntries",
+      "body": {
+        "catHieId": "page id",
+        "vin": "VIN",
+        "featureCodes": [],
+        "filter": true,
+        "langCode": "EN",
+        "marketCode": "GB",
+        "parentApplicable": true,
+        "retailerCode": "JLR_RETAILER_CODE",
+        "userId": "JLR_EPC_EMAIL",
+        "userType": "independent",
+        "userRole": "sponsored",
+        "retailerId": "JLR_RETAILER_CODE (the sponsoring retailer's partner code)"
+      },
+      "response": "responseObject.catalogueEntries[]: apn, callOutCode, catEntryDesc[], quantity, unitPrice, currency, applicableInd, cpFromVIN, cpToVIN",
+      "status": "confirmed"
+    },
+    "majorSections": {
+      "status": "not used by the EPC front end - the tree starts from vinDecode's catID via nextLevelHierarchies"
+    },
+    "searchCatalogues": {
+      "method": "POST",
+      "path": "/mobify/proxy/apigee/iepc/search/api/v1/searchCatalogues",
+      "body": {
+        "catId": "model catalogue (vinDecode catID)",
+        "catHieId": null,
+        "vin": "VIN",
+        "featureCodes": [],
+        "filter": true,
+        "dealerCode": "JLR_RETAILER_CODE",
+        "langCode": "EN",
+        "market": "GB",
+        "searchString": "text",
+        "searchType": "SECTION (pages by name) or PART (part descriptions)",
+        "recordFrom": 0,
+        "numberOfRecords": 5100,
+        "userCountryCode": "GB"
+      },
+      "response": "SECTION: sectionDTO[] catHieId, sectionNumber, catHieDesc, applicableInd. PART: catalogueHieRespDTO[] with callOutCode, catHieId and catEntries[] (apn, epn, unitPrice, applicableInd). Whole-phrase match on names; PART search can miss parts, so the code uses SECTION then catEntries.",
+      "status": "confirmed-live-2026-09-28 (0.3-1s per call)"
     }
   }
 }

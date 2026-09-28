@@ -1,0 +1,69 @@
+{
+  "_note": "Shape of a real catEntries response (responseObject.catalogueEntries[]); values are illustrative, not captured.",
+  "responseObject": {
+    "catHieId": 27576,
+    "catHieDesc": "Oil Filter",
+    "catalogueEntries": [
+      {
+        "apn": "LR073669",
+        "callOutCode": "1",
+        "catEntryDesc": ["Element - Oil Filter"],
+        "catEntryCmts": [],
+        "catEntryFeatures": ["2.0L 4 Cyl Diesel"],
+        "quantity": "1",
+        "currency": "GBP",
+        "unitPrice": 18.4,
+        "applicableInd": true,
+        "catEntryId": [101]
+      },
+      {
+        "apn": "LR011279",
+        "callOutCode": "3",
+        "catEntryDesc": ["Seal"],
+        "catEntryCmts": ["Oil filter housing"],
+        "catEntryFeatures": [],
+        "quantity": "2",
+        "currency": "GBP",
+        "unitPrice": 4.1,
+        "applicableInd": true,
+        "catEntryId": [102]
+      },
+      {
+        "apn": "LR022896",
+        "callOutCode": "1",
+        "catEntryDesc": ["Element - Oil Filter"],
+        "catEntryCmts": [],
+        "catEntryFeatures": ["3.0L V6 Petrol"],
+        "quantity": "1",
+        "currency": "GBP",
+        "unitPrice": 21.0,
+        "applicableInd": false,
+        "catEntryId": [103]
+      },
+      {
+        "apn": "LR000001",
+        "callOutCode": "2",
+        "catEntryDesc": ["Housing - Oil Filter"],
+        "catEntryCmts": [],
+        "catEntryFeatures": [],
+        "quantity": "1",
+        "currency": "GBP",
+        "unitPrice": null,
+        "applicableInd": true,
+        "catEntryId": [104]
+      },
+      {
+        "apn": "LR073669",
+        "callOutCode": "12",
+        "catEntryDesc": ["Element - Oil Filter"],
+        "catEntryCmts": [],
+        "catEntryFeatures": [],
+        "quantity": "1",
+        "currency": "GBP",
+        "unitPrice": 18.4,
+        "applicableInd": true,
+        "catEntryId": [105]
+      }
+    ]
+  }
+}

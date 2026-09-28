@@ -1,0 +1,253 @@
+{
+  "_note": "How quotation service names find JLR parts. For a service name, page names only shortlist where to look (\"pages\" adds words to look for in page names); the part DESCRIPTION must contain every word of the service or of one of its \"phrases\", and none of its \"exclude\" phrases. A plain list is shorthand for phrases only. The picker's own search sends exact page labels and does not use this file. Page wording checked against a live Range Rover Evoque (L538) tree on 2026-09-24; part wording is JLR's 'Noun - Qualifier' style (\"Filter - Oil\", \"Blade - Wiper\"). A \"context\" entry {page, part} matches a part by its words when the page label has the page words - JLR often names the filter on the Air Cleaner page just \"Element - Filter\".",
+  "aliases": {
+    "oil filter": {
+      "phrases": [
+        "filter oil"
+      ],
+      "pages": [
+        "oil filter",
+        "oil cooler and filter",
+        "lubrication"
+      ],
+      "exclude": [
+        "adaptor",
+        "housing"
+      ]
+    },
+    "air filter": {
+      "phrases": [
+        "air cleaner element",
+        "element air cleaner",
+        "air filter element"
+      ],
+      "pages": [
+        "air cleaner",
+        "air intake"
+      ],
+      "context": [
+        {
+          "page": "air cleaner",
+          "part": "element filter"
+        },
+        {
+          "page": "air cleaner",
+          "part": "element"
+        }
+      ]
+    },
+    "pollen filter": {
+      "phrases": [
+        "pollen filter",
+        "filter pollen",
+        "cabin air filter",
+        "air filter cabin",
+        "particulate filter",
+        "filter particle",
+        "filter air conditioning"
+      ],
+      "pages": [
+        "heater air cond internal",
+        "air conditioning",
+        "heater blower"
+      ],
+      "context": [
+        {
+          "page": "heater air cond",
+          "part": "filter"
+        }
+      ]
+    },
+    "cabin filter": {
+      "phrases": [
+        "pollen filter",
+        "filter pollen",
+        "cabin air filter",
+        "filter particle",
+        "filter air conditioning"
+      ],
+      "pages": [
+        "heater air cond internal",
+        "air conditioning"
+      ],
+      "context": [
+        {
+          "page": "heater air cond",
+          "part": "filter"
+        }
+      ]
+    },
+    "fuel filter": {
+      "phrases": [
+        "filter fuel",
+        "fuel filter element"
+      ],
+      "pages": [
+        "fuel filter",
+        "fuel system"
+      ],
+      "context": [
+        {
+          "page": "fuel filter",
+          "part": "element"
+        }
+      ]
+    },
+    "wipers": {
+      "phrases": [
+        "wiper blade",
+        "blade wiper"
+      ],
+      "pages": [
+        "windscreen wiper",
+        "rear window wiper"
+      ],
+      "exclude": [
+        "motor",
+        "arm"
+      ]
+    },
+    "wiper blades": {
+      "phrases": [
+        "blade wiper"
+      ],
+      "pages": [
+        "windscreen wiper",
+        "rear window wiper"
+      ]
+    },
+    "brake pads": {
+      "phrases": [
+        "brake pad",
+        "pad brake",
+        "pad kit"
+      ],
+      "pages": [
+        "brake discs and calipers"
+      ],
+      "exclude": [
+        "pedal",
+        "wear sensor",
+        "wear indicator"
+      ]
+    },
+    "brake discs": {
+      "phrases": [
+        "brake disc",
+        "disc brake"
+      ],
+      "pages": [
+        "brake discs and calipers"
+      ],
+      "exclude": [
+        "pad",
+        "shield"
+      ]
+    },
+    "brake fluid": {
+      "phrases": [
+        "brake fluid",
+        "fluid brake"
+      ],
+      "pages": [
+        "hydraulic oil brake fluid"
+      ]
+    },
+    "spark plugs": {
+      "phrases": [
+        "spark plug"
+      ],
+      "pages": [
+        "ignition"
+      ]
+    },
+    "glow plugs": {
+      "phrases": [
+        "glow plug"
+      ],
+      "pages": [
+        "ignition",
+        "starting"
+      ]
+    },
+    "auxiliary belt": {
+      "phrases": [
+        "drive belt",
+        "belt accessory drive",
+        "belt drive"
+      ],
+      "pages": [
+        "accessory drive"
+      ],
+      "exclude": [
+        "tensioner",
+        "pulley"
+      ],
+      "context": [
+        {
+          "page": "drive belt",
+          "part": "belt"
+        }
+      ]
+    },
+    "timing belt": {
+      "phrases": [
+        "timing belt",
+        "belt timing",
+        "belt camshaft drive"
+      ],
+      "pages": [
+        "timing gear"
+      ],
+      "context": [
+        {
+          "page": "timing",
+          "part": "belt"
+        }
+      ]
+    },
+    "shock absorbers": {
+      "phrases": [
+        "shock absorber",
+        "damper"
+      ],
+      "pages": [
+        "suspension"
+      ]
+    },
+    "battery": {
+      "phrases": [
+        "battery"
+      ],
+      "pages": [
+        "battery"
+      ],
+      "exclude": [
+        "cable",
+        "tray",
+        "clamp",
+        "cover"
+      ]
+    },
+    "drain plug": {
+      "phrases": [
+        "drain plug",
+        "plug drain",
+        "plug oil pan"
+      ],
+      "pages": [
+        "oil pan"
+      ]
+    },
+    "sump plug washer": {
+      "phrases": [
+        "drain plug washer",
+        "washer sealing",
+        "washer drain plug"
+      ],
+      "pages": [
+        "oil pan"
+      ]
+    }
+  }
+}

@@ -1,119 +1,74 @@
-import got from 'got';
-import { CookieJar } from 'tough-cookie';
+import { randomUUID } from 'node:crypto';
 
+import { JlrAuth } from './auth.js';
 import { config } from './config.js';
-import { JlrBrowserSession } from './browserSession.js';
+import { JlrAuthError, JlrError, JlrUpstreamError } from './errors.js';
 
+/**
+ * POST-JSON to the EPC catalogue API, authenticated with the token JlrAuth
+ * provides. Plain HTTP; see auth.js for how the token is obtained.
+ *
+ * Headers match what the EPC front end sends to /mobify/proxy/apigee:
+ * a bearer token and a fresh rdm-transaction-id per request.
+ */
 export class JlrClient {
-  #jar = new CookieJar();
-  #authenticated = false;
-  #browserSession = config.sessionCookie || config.apigeeToken ? null : new JlrBrowserSession();
+  constructor({ auth = new JlrAuth(), fetchImpl = globalThis.fetch } = {}) {
+    this.auth = auth;
+    this.fetch = fetchImpl;
+  }
 
   async postJson(path, body) {
-    if (this.#browserSession) return this.#browserSession.postJson(path, body);
-    await this.#ensureAuthenticated();
-    const response = await got(this.#url(path), {
-      cookieJar: this.#jar,
-      method: 'POST',
-      json: body,
-      headers: this.#headers(),
-      timeout: { request: config.timeout },
-      throwHttpErrors: false,
-      retry: { limit: 0 },
-      responseType: 'json',
-    });
+    let response = await this.#send(path, body);
 
-    if (response.statusCode === 401) {
-      this.#authenticated = false;
-      throw new Error(
-        `JLR returned HTTP 401 from ${path}. Set a current JLR_SESSION_COOKIE and, if required by the account, JLR_APIGEE_TOKEN.`,
-      );
-    }
-    if (response.statusCode >= 400) {
-      throw new Error(`JLR returned HTTP ${response.statusCode} from ${path}.`);
+    // Expired catalogue token: fetch a new one. Still refused: log in again.
+    for (const full of [false, true]) {
+      if (response.status !== 401 && response.status !== 403) break;
+      await this.auth.invalidate({ full });
+      response = await this.#send(path, body);
     }
 
-    return response.body;
+    if (response.status === 401 || response.status === 403) {
+      throw new JlrAuthError(`JLR refused ${path} (HTTP ${response.status}) even after logging in again.`);
+    }
+    if (!response.ok) {
+      throw new JlrUpstreamError(`JLR returned HTTP ${response.status} from ${path}.`, {
+        status: response.status,
+        path,
+      });
+    }
+
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new JlrUpstreamError(`JLR returned a non-JSON response from ${path}.`, { path });
+    }
   }
 
-  async #ensureAuthenticated() {
-    if (this.#authenticated || config.sessionCookie || config.apigeeToken) return;
-    if (!config.email || !config.password) {
-      throw new Error('JLR_EPC_EMAIL and JLR_EPC_PASSWORD are not configured.');
+  /** Nothing to release: kept so callers can close any client the same way. */
+  async close() {}
+
+  async #send(path, body) {
+    const token = await this.auth.rdmToken();
+    const url = `${config.baseUrl}/${String(path).replace(/^\/+/, '')}`;
+
+    try {
+      return await this.fetch(url, {
+        method: 'POST',
+        headers: {
+          'User-Agent': config.userAgent,
+          Accept: 'application/json, text/plain, */*',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'rdm-transaction-id': randomUUID(),
+          Origin: config.baseUrl,
+          Referer: `${config.baseUrl}/jlr-epc/en-GB/home`,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(config.timeout),
+      });
+    } catch (error) {
+      throw new JlrError(`Could not reach JLR for ${path}: ${error.message}`, { cause: error });
     }
-
-    const url = `${config.authBaseUrl.replace(/\/+$/, '')}/json/realms/${encodeURIComponent(config.authRealm)}/authenticate`;
-    const query = new URLSearchParams({
-      authIndexType: 'service',
-      authIndexValue: config.authTree,
-    });
-    const baseOptions = {
-      cookieJar: this.#jar,
-      headers: {
-        ...this.#headers(),
-        Accept: 'application/json',
-        'Accept-API-Version': 'protocol=1.0,resource=2.1',
-        'X-Requested-With': 'forgerock-sdk',
-        'Content-Type': 'application/json',
-      },
-      timeout: { request: config.timeout },
-      throwHttpErrors: false,
-      retry: { limit: 0 },
-      responseType: 'json',
-    };
-
-    let response = await got(`${url}?${query}`, { ...baseOptions, method: 'POST' });
-    let body = response.body;
-    if (response.statusCode >= 400 || !body?.authId) {
-      throw new Error(`JLR login could not start (HTTP ${response.statusCode}).`);
-    }
-
-    const callbacks = body.callbacks ?? [];
-    for (const callback of callbacks) {
-      const type = callback.type;
-      const inputs = callback.input ?? [];
-      const name = inputs.find((input) => input.name === 'IDToken1') || inputs.find((input) => /username|name/i.test(input.name));
-      const password = inputs.find((input) => input.name === 'IDToken2') || inputs.find((input) => /password/i.test(input.name));
-      if (type === 'NameCallback' && name) name.value = config.email;
-      if (type === 'PasswordCallback' && password) password.value = config.password;
-    }
-
-    response = await got(`${url}?${query}`, {
-      ...baseOptions,
-      method: 'POST',
-      json: { ...body, callbacks },
-    });
-    body = response.body;
-
-    if (response.statusCode >= 400 || body?.code || body?.callbacks) {
-      throw new Error('JLR login was rejected or requires an interactive step (MFA/CAPTCHA).');
-    }
-
-    if (body?.tokenId) {
-      this.#jar.setCookie(`iPlanetDirectoryPro=${body.tokenId}`, config.authBaseUrl);
-    }
-    this.#authenticated = true;
-  }
-
-  #url(path) {
-    return `${config.baseUrl.replace(/\/+$/, '')}/${String(path).replace(/^\/+/, '')}`;
-  }
-
-  #headers() {
-    const headers = {
-      'User-Agent':
-        process.env.JLR_USER_AGENT ||
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36',
-      Accept: 'application/json, text/plain, */*',
-      Referer: `${config.baseUrl.replace(/\/+$/, '')}/jlr-epc/en-GB/home`,
-    };
-
-    if (config.sessionCookie) headers.Cookie = config.sessionCookie;
-    if (config.apigeeToken) {
-      headers.Authorization = config.apigeeToken.startsWith('Bearer ')
-        ? config.apigeeToken
-        : `Bearer ${config.apigeeToken}`;
-    }
-    return headers;
   }
 }

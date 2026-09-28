@@ -1,7 +1,7 @@
 {
   "name": "gsf-price-integration",
   "version": "1.0.0",
-  "description": "Read-only GSF TradeHub trade-price lookup: registration + category -> price",
+  "description": "Read-only trade-price lookup and quotations: GSF TradeHub and JLR EPC",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -9,13 +9,15 @@
   },
   "bin": {
     "gsf": "./bin/gsf.js",
-    "gsf-quote": "./bin/quote.js"
+    "gsf-quote": "./bin/quote.js",
+    "jlr": "./bin/jlr.js"
   },
   "scripts": {
     "gsf": "node bin/gsf.js",
     "test": "node --test",
     "serve": "node bin/serve.js",
-    "quote": "node bin/quote.js"
+    "quote": "node bin/quote.js",
+    "jlr": "node bin/jlr.js"
   },
   "engines": {
     "node": ">=18"
@@ -23,7 +25,6 @@
   "dependencies": {
     "express": "^5.2.1",
     "got": "^14.4.5",
-    "playwright": "^1.63.0",
     "tough-cookie": "^5.1.0"
   },
   "optionalDependencies": {

@@ -139,6 +139,8 @@ function normalise(quotation) {
 
   return {
     ...quotation,
+    // Every quotation before JLR was a GSF one.
+    supplier: quotation.supplier ?? 'gsf',
     markupPercent,
     lines,
     totals: totalsFor(lines, markupPercent),
@@ -196,6 +198,10 @@ export async function createQuotation({
   fitment = null,
   prefer = null,
   service = null,
+  // 'gsf' or 'jlr'. Stored on the quotation so an edit re-prices new lines
+  // against the same supplier. `service` must be that supplier's price service.
+  supplier = 'gsf',
+  markupPercent = config.markupPercent,
 } = {}) {
   if (!registration || !String(registration).trim()) {
     throw new GsfError('A registration is required.');
@@ -228,9 +234,9 @@ export async function createQuotation({
     lines.push(await priceLine(prices, registration, entry, brands, fitment, prefer));
   }
 
-  const markupPercent = config.markupPercent;
   for (const line of lines) {
-    line.quantity = 1;
+    // JLR says how many a vehicle takes (four spark plugs); GSF does not.
+    line.quantity = quantityOf({ quantity: line.unitsPerVehicle });
     line.sellPrice = line.found ? sellPrice(line.tradePrice, markupPercent) : null;
   }
 
@@ -245,7 +251,9 @@ export async function createQuotation({
     vehicle,
     vin: lines.find((l) => l.vin)?.vin ?? null,
 
-    brandPriority: [brands].flat().filter(Boolean),
+    supplier,
+    // Every JLR part is genuine, so a brand order means nothing there.
+    brandPriority: supplier === 'gsf' ? [brands].flat().filter(Boolean) : [],
     markupPercent,
     lines,
 
@@ -298,10 +306,12 @@ async function priceLine(prices, registration, entry, brands, fitment, prefer) {
         fallbackUsed: !found.brandMatched && [brands].flat().filter(Boolean).length > 0,
 
         // The fitment was chosen deliberately, so there is nothing left to
-        // review - that was the whole point of the picker.
-        needsReview: false,
-        reviewReason: null,
+        // review - that was the whole point of the picker. An option can
+        // still carry its own flag (a JLR price in another currency).
+        needsReview: Boolean(found.needsReview),
+        reviewReason: found.needsReview ? found.reviewReason ?? null : null,
 
+        unitsPerVehicle: found.unitsPerVehicle ?? null,
         alternatives: found.alternatives ?? [],
 
         // The quotation takes its vehicle from the lines, so this path has to
@@ -345,6 +355,7 @@ async function priceLine(prices, registration, entry, brands, fitment, prefer) {
       stock: r.stock,
       fitment: r.fitment,
       fitmentGroup: r.fitmentGroup,
+      unitsPerVehicle: r.unitsPerVehicle ?? null,
 
       brandSelected: r.brandSelected ?? null,
       fallbackUsed: r.fallbackUsed,

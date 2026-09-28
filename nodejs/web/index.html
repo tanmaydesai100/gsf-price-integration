@@ -6,7 +6,7 @@
 </head>
 <body>
 <!-- ARTIFACT:BEGIN  (everything between the markers is also the published review page) -->
-<title>GSF Parts Quotations</title>
+<title>Parts Quotations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;600&display=swap">
@@ -197,6 +197,19 @@
                        line-height: 1; padding: 0 2px; cursor: pointer; }
   .err { font-size: 13px; color: var(--bad); border-left: 3px solid var(--bad); padding-left: 9px; }
 
+  /* JLR jobs: a fixed list, the same for every vehicle */
+  .jobs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .jobs button { background: var(--ground); color: var(--ink); border-color: var(--line);
+                 font: 600 12.5px var(--body); padding: 6px 10px; }
+  .jobs button:hover:not([disabled]) { background: var(--accent-wash); border-color: var(--accent); color: var(--accent); }
+  .jobs button[disabled] { opacity: 0.55; cursor: default; }
+  .opt.alt .opt-label { color: var(--soft); }
+  .unpriced { padding: 7px 10px; font-size: 12px; color: var(--soft); border-top: 1px dashed var(--line); }
+  .opts-total { display: flex; justify-content: space-between; padding: 8px 10px;
+                border-top: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+  .opts-total b { font-family: var(--mono); }
+  .or { margin: 12px 0 5px; }
+
   /* -------------------------------------------------------------- list */
 
   .qrow {
@@ -312,7 +325,20 @@
   .backlink { display: none; }
   @media (max-width: 880px) { .backlink { display: inline-block; } }
 
-  /* JLR is an independent supplier test surface, separate from GSF quotes. */
+  /* Supplier switch and tag. GSF and JLR quotations share one list. */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; color: var(--soft);
+                padding: 7px 14px; font-weight: 600; min-height: 0; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .supplier { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .04em;
+              padding: 3px 6px; border-radius: 4px; background: var(--raised); color: var(--soft); }
+  .supplier.jlr { background: var(--accent-wash); color: var(--accent); }
+  .results .path { display: block; font-size: 12px; color: var(--faint); }
+  .debug { margin-top: 20px; }
+  .debug > summary { cursor: pointer; color: var(--soft); font-size: 13px; padding: 6px 0; }
+
+  /* JLR raw page lookup - a debugging aid, separate from quotations. */
   .jlr-panel { margin-bottom: 20px; border-color: #b9c9e6; }
   .jlr-panel .panel-head { color: #31588f; }
   .jlr-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
@@ -362,6 +388,13 @@
     return 'pill odd';
   }
 
+  var SUPPLIER_NAME = { gsf: 'GSF', jlr: 'JLR' };
+
+  function SupplierTag(props) {
+    var key = props.supplier || 'gsf';
+    return h`<span class=${'supplier ' + key}>${SUPPLIER_NAME[key] || key}</span>`;
+  }
+
   function Plate(props) {
     return h`<span class=${'plate' + (props.small ? ' sm' : '')}>${props.children}</span>`;
   }
@@ -370,6 +403,8 @@
 
   function ServicePicker(props) {
     var chosen = props.chosen, onChange = props.onChange;
+    var supplier = props.supplier || 'gsf';
+    var jlr = supplier === 'jlr';
     var qs = useState(''), q = qs[0], setQ = qs[1];
     var rs = useState([]), results = rs[0], setResults = rs[1];
 
@@ -379,20 +414,57 @@
     var ts = useState({}), ticked = ts[0], setTicked = ts[1];
     var es = useState(null), oerr = es[0], setOerr = es[1];
 
+    var ss = useState(false), searching = ss[0], setSearching = ss[1];
+    var se = useState(null), serr = se[0], setSerr = se[1];
+
+    // JLR jobs: the fixed list, loaded once. Each is priced by callout base.
+    var js = useState([]), jobs = js[0], setJobs = js[1];
+    useEffect(function () {
+      if (!jlr || jobs.length > 0) return;
+      fetch('/api/jlr/jobs')
+        .then(function (r) { return r.json(); })
+        .then(function (b) { setJobs(b.jobs || []); })
+        .catch(function () { setJobs([]); });
+    }, [jlr]);
+
+    // GSF has one category list for every car. JLR's catalogue is filtered
+    // to the vehicle, so its search runs over this vehicle's own pages - the
+    // first search on a vehicle walks its catalogue and takes a while.
     useEffect(function () {
       var cancelled = false;
       var term = q.trim();
-      if (term.length < 2) { setResults([]); return; }
+      setSerr(null);
+      if (term.length < 2) { setResults([]); setSearching(false); return; }
+      if (jlr && !props.registration.trim()) {
+        setResults([]);
+        setSerr('Enter a registration or VIN first — the JLR catalogue depends on the vehicle.');
+        return;
+      }
+
+      var url = jlr
+        ? '/api/jlr/pages?registration=' + encodeURIComponent(props.registration) +
+          '&q=' + encodeURIComponent(term) + '&limit=40'
+        : '/api/categories?q=' + encodeURIComponent(term) + '&limit=40';
 
       var timer = setTimeout(function () {
-        fetch('/api/categories?q=' + encodeURIComponent(term) + '&limit=40')
-          .then(function (r) { return r.json(); })
-          .then(function (d) { if (!cancelled) setResults(d.categories || []); })
-          .catch(function () { if (!cancelled) setResults([]); });
-      }, 160);
+        setSearching(true);
+        fetch(url)
+          .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+          .then(function (out) {
+            if (cancelled) return;
+            if (!out.ok) throw new Error(out.body.message || 'Search failed.');
+            setResults(jlr
+              ? (out.body.pages || []).map(function (p) {
+                  return { value: p.label, text: p.name, path: p.label };
+                })
+              : (out.body.categories || []).map(function (name) { return { value: name, text: name }; }));
+          })
+          .catch(function (err) { if (!cancelled) { setResults([]); setSerr(err.message); } })
+          .finally(function () { if (!cancelled) setSearching(false); });
+      }, jlr ? 400 : 160);
 
       return function () { cancelled = true; clearTimeout(timer); };
-    }, [q]);
+    }, [q, supplier, jlr && props.registration]);
 
     // Adding a service fetches its fitments. One option means there is no
     // decision to make, so it joins the quotation straight away.
@@ -409,14 +481,16 @@
       setOpts(null);
 
       fetch('/api/options?registration=' + encodeURIComponent(props.registration) +
-            '&category=' + encodeURIComponent(name))
+            '&category=' + encodeURIComponent(name) + '&supplier=' + supplier)
         .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
         .then(function (out) {
           if (!out.ok) throw new Error(out.body.message || 'Could not load fitments.');
           var list = out.body.options || [];
 
           if (list.length === 0) {
-            setOerr('No priced, in-stock part for “' + name + '” on this vehicle.');
+            setOerr(jlr
+              ? 'No priced JLR part for “' + name + '” on this vehicle.'
+              : 'No priced, in-stock part for “' + name + '” on this vehicle.');
             return;
           }
           if (list.length === 1) {
@@ -431,13 +505,50 @@
         .finally(function () { setLoading(false); });
     }
 
+    // A job opens in the same panel as a catalogue page: the parts it needs
+    // are ticked, alternatives are there to swap in, and lines staff should
+    // confirm are marked.
+    function openJob(job) {
+      if (!props.registration.trim()) {
+        setOerr('Enter a registration or VIN first — the parts depend on the vehicle.');
+        return;
+      }
+
+      setQ('');
+      setResults([]);
+      setOerr(null);
+      setLoading(true);
+      setOpts(null);
+
+      fetch('/api/jlr/job?registration=' + encodeURIComponent(props.registration) +
+            '&job=' + encodeURIComponent(job.key))
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'Could not price this job.');
+          var list = out.body.options || [];
+          if (list.length === 0) {
+            var why = (out.body.unpriced || []).map(function (u) { return u.reason; })[0];
+            setOerr('No JLR parts for “' + job.label + '” on this vehicle' + (why ? ' — ' + why : '.'));
+            return;
+          }
+
+          var pre = {};
+          list.forEach(function (o) { if (!o.alternative) pre[o.group] = true; });
+          setOpts({ category: out.body.label, list: list, job: true, vehicle: out.body.vehicle, unpriced: out.body.unpriced || [] });
+          setTicked(pre);
+        })
+        .catch(function (err) { setOerr(err.message); })
+        .finally(function () { setLoading(false); });
+    }
+
     function addOptions(category, list) {
       var additions = list
         .filter(function (o) { return !chosen.some(function (c) { return c.group === o.group; }); })
         .map(function (o) {
           return {
             category: category, group: o.group, label: o.label,
-            brand: o.brand, sellPrice: o.sellPrice, availability: o.availability
+            brand: o.brand, sellPrice: o.sellPrice, availability: o.availability,
+            quantity: o.unitsPerVehicle || 1
           };
         });
 
@@ -450,25 +561,41 @@
 
     return h`
       <div>
-        <label for="service-search">Services</label>
-        <input id="service-search" type="search" placeholder="Search 668 categories — try “brake”"
+        ${jlr && h`
+          <label>Common jobs</label>
+          <div class="jobs">
+            ${jobs.map(function (j) {
+              return h`<button type="button" key=${j.key} disabled=${loading}
+                               onClick=${function () { openJob(j); }}>${j.label}</button>`;
+            })}
+          </div>
+          <label for="service-search" class="or">Or search the catalogue</label>`}
+        ${!jlr && h`<label for="service-search">Services</label>`}
+        <input id="service-search" type="search"
+               placeholder=${jlr ? 'Search this vehicle’s JLR catalogue — try “oil filter”' : 'Search 668 categories — try “brake”'}
                value=${q} onInput=${function (e) { setQ(e.target.value); }} autocomplete="off" />
 
-        ${loading && h`<p class="hint"><span class="spinner"></span>Loading fitments…</p>`}
+        ${searching && h`<p class="hint"><span class="spinner"></span>${jlr
+          ? 'Searching the JLR catalogue…'
+          : 'Searching…'}</p>`}
+        ${serr && h`<p class="err" style=${{ marginTop: '7px' }}>${serr}</p>`}
+
+        ${loading && h`<p class="hint"><span class="spinner"></span>${jlr ? 'Pricing from the JLR catalogue…' : 'Loading fitments…'}</p>`}
         ${oerr && h`<p class="err" style=${{ marginTop: '7px' }}>${oerr}</p>`}
 
         ${results.length > 0 && !opts && h`
           <div class="results" style=${{ marginTop: '7px' }}>
-            ${results.map(function (name) {
-              return h`<button type="button" key=${name} onClick=${function () { openCategory(name); }}>
-                         ${name}
+            ${results.map(function (r) {
+              return h`<button type="button" key=${r.value} onClick=${function () { openCategory(r.value); }}>
+                         ${r.text}
+                         ${r.path && r.path !== r.text && h`<span class="path">${r.path}</span>`}
                        </button>`;
             })}
           </div>`}
 
         ${opts && h`
           <div class="opts" style=${{ marginTop: '8px' }}>
-            <div class="opts-head">${opts.category} · ${opts.list.length} fitments · best price each</div>
+            <div class="opts-head">${opts.category} · ${opts.job ? opts.vehicle : opts.list.length + ' ' + (jlr ? 'JLR parts' : 'fitments · best price each')}</div>
             ${opts.list.map(function (o, i) {
               var prev = i > 0 ? opts.list[i - 1].position : null;
               var head = o.position !== prev
@@ -477,7 +604,7 @@
 
               return h`<${React.Fragment} key=${o.group}>
                 ${head}
-                <label class="opt">
+                <label class=${'opt' + (o.alternative ? ' alt' : '')}>
                   <input type="checkbox" checked=${Boolean(ticked[o.group])}
                          onChange=${function (ev) {
                            var next = Object.assign({}, ticked);
@@ -488,7 +615,11 @@
                     <span class="opt-label">${o.label}</span>
                     <span class="opt-sub">
                       <span>${o.brand}</span>
-                      <span class=${availClass(o.availability, false)}>${o.availability}</span>
+                      ${o.sku && jlr && h`<span class="sku">${o.sku}</span>`}
+                      ${o.availability && h`<span class=${availClass(o.availability, false)}>${o.availability}</span>`}
+                      ${o.unitsPerVehicle > 1 && h`<span>×${o.unitsPerVehicle} per vehicle</span>`}
+                      ${o.alternative && h`<span class="pill odd">Alternative</span>`}
+                      ${o.needsReview && h`<span class="pill odd" title=${o.reviewReason || ''}>Staff to confirm</span>`}
                       ${o.candidates > 1 && h`<span>${o.candidates} brands</span>`}
                     </span>
                   </span>
@@ -496,6 +627,15 @@
                 </label>
               <//>`;
             })}
+            ${opts.job && opts.unpriced.map(function (u) {
+              return h`<div class="unpriced" key=${'u' + u.base}>${u.name} — ${u.status === 'no_page' ? 'not on this vehicle' : 'not found, check manually'}</div>`;
+            })}
+            ${opts.job && h`<div class="opts-total">
+              <span>Ticked · ex-VAT</span>
+              <b>${money(opts.list.reduce(function (t, o) {
+                return t + (ticked[o.group] ? (o.sellPrice || 0) * (o.unitsPerVehicle || 1) : 0);
+              }, 0))}</b>
+            </div>`}
           </div>
 
           <div style=${{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -515,6 +655,7 @@
             ${chosen.map(function (c) {
               return h`<span class="picked-row" key=${c.group || c.category}>
                 <span class="lbl">${c.label || c.category}</span>
+                ${c.quantity > 1 && h`<span class="hint">×${c.quantity}</span>`}
                 <span class="amt">${money(c.sellPrice)}</span>
                 <button type="button" aria-label=${'Remove ' + (c.label || c.category)}
                         onClick=${function () {
@@ -525,8 +666,9 @@
           </div>`}
 
         ${chosen.length === 0 && !opts && h`<p class="hint" style=${{ marginTop: '7px' }}>
-          Search a category, then pick the fitment you want. A category with only one
-          fitment is added straight away.
+          ${jlr
+            ? 'Pick a common job for a price straight away, or search this vehicle’s JLR catalogue for anything else.'
+            : 'Search a category, then pick the fitment you want. A category with only one fitment is added straight away.'}
         </p>`}
       </div>`;
   }
@@ -538,7 +680,16 @@
     var r = useState(''), reg = r[0], setReg = r[1];
     var d = useState(today), date = d[0], setDate = d[1];
     var s = useState([]), services = s[0], setServices = s[1];
+    var sp = useState('gsf'), supplier = sp[0], setSupplier = sp[1];
     var b = useState(false), busy = b[0], setBusy = b[1];
+
+    // Picked lines belong to one supplier, so switching starts the list again.
+    function chooseSupplier(next) {
+      if (next === supplier) return;
+      setSupplier(next);
+      setServices([]);
+      setError(null);
+    }
     var e = useState(null), error = e[0], setError = e[1];
 
     function submit(ev) {
@@ -552,6 +703,7 @@
         body: JSON.stringify({
           registration: reg,
           date: date,
+          supplier: supplier,
           services: services.map(function (c) { return { category: c.category, group: c.group }; })
         })
       })
@@ -579,10 +731,21 @@
       <form class="panel" onSubmit=${submit}>
         <div class="panel-head">New quotation</div>
         <div class="panel-body">
+          <div>
+            <label>Supplier</label>
+            <div class="seg" role="group" aria-label="Supplier">
+              ${['gsf', 'jlr'].map(function (key) {
+                return h`<button type="button" key=${key} aria-pressed=${String(supplier === key)}
+                                 onClick=${function () { chooseSupplier(key); }}>
+                           ${key === 'gsf' ? 'GSF' : 'JLR genuine'}
+                         </button>`;
+              })}
+            </div>
+          </div>
           <div class="row2">
             <div>
-              <label for="registration">Registration</label>
-              <input id="registration" type="text" value=${reg} placeholder="P44PYN"
+              <label for="registration">${supplier === 'jlr' ? 'Registration or VIN' : 'Registration'}</label>
+              <input id="registration" type="text" value=${reg} placeholder=${supplier === 'jlr' ? 'WL61RZO' : 'P44PYN'}
                      onInput=${function (ev) { setReg(ev.target.value); }} autocomplete="off" />
             </div>
             <div>
@@ -592,7 +755,7 @@
             </div>
           </div>
 
-          <${ServicePicker} chosen=${services} onChange=${setServices} registration=${reg} />
+          <${ServicePicker} chosen=${services} onChange=${setServices} registration=${reg} supplier=${supplier} />
 
           ${error && h`<p class="err">${error}</p>`}
 
@@ -604,10 +767,10 @@
 
           ${services.length > 0 && h`<p class="hint">
             ${services.length} ${services.length === 1 ? 'line' : 'lines'} ·
-            ${money(services.reduce(function (t, c) { return t + (c.sellPrice || 0); }, 0))} ex-VAT
+            ${money(services.reduce(function (t, c) { return t + (c.sellPrice || 0) * (c.quantity || 1); }, 0))} ex-VAT
           </p>`}
           ${!busy && missing && h`<p class="hint">${missing}</p>`}
-          ${busy && h`<p class="hint">Each service is priced against GSF in turn, so this takes a few seconds.</p>`}
+          ${busy && h`<p class="hint">Each service is priced against ${SUPPLIER_NAME[supplier]} in turn, so this takes a few seconds.</p>`}
         </div>
       </form>`;
   }
@@ -632,6 +795,7 @@
               <span class="qrow-top">
                 <span class="qnum">${q.number}</span>
                 <${Plate} small=${true}>${q.registration}<//>
+                <${SupplierTag} supplier=${q.supplier} />
                 <span class="qdate">${longDate(q.date)}</span>
               </span>
               <span class="qveh">${q.vehicle || 'Vehicle not identified'}</span>
@@ -681,7 +845,9 @@
             })}</div>`}
         </td>
         <td>
-          <span class=${availClass(l.availability, odd)}>${l.availability}</span>
+          ${l.availability
+            ? h`<span class=${availClass(l.availability, odd)}>${l.availability}</span>`
+            : h`<span class="note">Not shown by supplier</span>`}
           ${odd && h`<span class="note">Unrecognised: ${l.unknownAvailability.join(', ')}</span>`}
         </td>
         <td class="num">
@@ -764,7 +930,7 @@
         var key = p.category + '\u0000' + (p.group || '');
         if (have[key]) return;
         have[key] = true;
-        lines.push({ category: p.category, group: p.group || null, quantity: 1 });
+        lines.push({ category: p.category, group: p.group || null, quantity: p.quantity || 1 });
       });
 
       save(lines);
@@ -789,6 +955,7 @@
             <h2>${q.number}</h2>
             <div class="meta">
               <div><${Plate}>${q.registration}<//></div>
+              <div><${SupplierTag} supplier=${q.supplier} /></div>
             </div>
             <div class="meta" style=${{ marginTop: '10px' }}>
               <div>Vehicle <b>${q.vehicle || 'not identified'}</b></div>
@@ -843,7 +1010,8 @@
               </button>`}
             ${!saving && adding && h`
               <div style=${{ width: '100%' }}>
-                <${ServicePicker} chosen=${[]} onChange=${addLines} registration=${q.registration} />
+                <${ServicePicker} chosen=${[]} onChange=${addLines} registration=${q.registration}
+                                  supplier=${q.supplier || 'gsf'} />
                 <button type="button" class="ghost" style=${{ marginTop: '8px' }}
                         onClick=${function () { setAdding(false); }}>Cancel</button>
               </div>`}
@@ -908,12 +1076,13 @@
 
     return h`
       <section class="panel jlr-panel">
-        <div class="panel-head">JLR catalogue test</div>
+        <div class="panel-head">JLR page lookup</div>
         <div class="panel-body">
-          <p class="hint">Independent JLR lookup. Enter the registration and page ID. The server must have a current JLR session.</p>
+          <p class="hint">Every part on one JLR catalogue page, by page ID. Skips the service search -
+            useful for checking one page. Takes a registration or a VIN.</p>
           <form class="jlr-form" onSubmit=${lookup}>
             <div>
-              <label for="jlr-registration">Registration</label>
+              <label for="jlr-registration">Registration or VIN</label>
               <input id="jlr-registration" type="text" value=${registration} placeholder="WL61RZO"
                      onInput=${function (ev) { setRegistration(ev.target.value); }} />
             </div>
@@ -954,7 +1123,7 @@
       if (!REVIEW) return list;
       return REVIEW.quotations.map(function (q) {
         return {
-          number: q.number, registration: q.registration, vehicle: q.vehicle,
+          number: q.number, registration: q.registration, supplier: q.supplier, vehicle: q.vehicle,
           date: q.date, createdAt: q.createdAt,
           services: (q.totals && q.totals.services) || (q.lines || []).length,
           sell: (q.totals && q.totals.sell) || 0,
@@ -993,7 +1162,7 @@
     return h`
       <div class="wrap">
         <header class="masthead">
-          <h1>GSF Parts Quotations</h1>
+          <h1>Parts Quotations</h1>
           <span class="sub">${REVIEW ? 'Parts validation · read-only' : 'Version 2'}</span>
           <span class="spacer"></span>
           <span class="stamp">Parts only · ex-VAT</span>
@@ -1007,8 +1176,6 @@
             sell pricing are not in this version.
           </p>`}
 
-        ${!REVIEW && h`<${JlrCataloguePanel} />`}
-
         <div class="panes">
           <div class="rail">
             ${!REVIEW && h`<${CreateForm} onCreated=${function (q) { refresh(); setSelected(q.number); }} />`}
@@ -1017,6 +1184,12 @@
           <${QuoteDetail} quote=${detail} count=${summaries.length}
             onChanged=${function (updated) { setDetail(updated); refresh(); }} />
         </div>
+
+        ${!REVIEW && h`
+          <details class="debug">
+            <summary>JLR page lookup (debugging)</summary>
+            <${JlrCataloguePanel} />
+          </details>`}
       </div>`;
   }
 
