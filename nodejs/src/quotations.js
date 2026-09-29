@@ -38,6 +38,29 @@ const storeDir = () =>
 export const DEFAULT_BRAND_PRIORITY = ['MANN-FILTER', 'BOSCH'];
 
 const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''));
+
+export const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim());
+
+const CUSTOMER_FIELDS = ['name', 'email', 'phone', 'address1', 'address2', 'town', 'county', 'postcode', 'accountNumber'];
+
+/**
+ * Customer details for the quotation PDF. Every field is optional; an email,
+ * when given, must look like one, because the PDF is sent to it. Returns
+ * null when nothing was given.
+ */
+export function cleanCustomer(input) {
+  if (input == null) return null;
+  if (typeof input !== 'object') throw new GsfError('Customer details must be an object.');
+
+  const out = {};
+  for (const field of CUSTOMER_FIELDS) {
+    const value = String(input[field] ?? '').trim().slice(0, 200);
+    if (value) out[field] = value;
+  }
+  if (out.email && !isEmail(out.email)) throw new GsfError(`"${out.email}" is not a valid email address.`);
+  if (out.postcode) out.postcode = out.postcode.toUpperCase();
+  return Object.keys(out).length > 0 ? out : null;
+}
 const round2 = (n) => Math.round(n * 100) / 100;
 
 /** Trade cost plus the markup, rounded once, per unit. */
@@ -202,6 +225,7 @@ export async function createQuotation({
   // against the same supplier. `service` must be that supplier's price service.
   supplier = 'gsf',
   markupPercent = config.markupPercent,
+  customer = null,
 } = {}) {
   if (!registration || !String(registration).trim()) {
     throw new GsfError('A registration is required.');
@@ -216,6 +240,8 @@ export async function createQuotation({
   // A service is either a bare category name - price the whole category and
   // let the brand rule decide - or { category, group }, one specific fitment
   // the user picked. The picker sends the second; the CLI can send either.
+  const who = cleanCustomer(customer);
+
   const wanted = services.map((entry) =>
     typeof entry === 'string' ? { category: entry, group: null } : entry,
   );
@@ -250,6 +276,9 @@ export async function createQuotation({
 
     vehicle,
     vin: lines.find((l) => l.vin)?.vin ?? null,
+
+    // Optional; only the PDF and the email use it.
+    customer: who,
 
     supplier,
     // Every JLR part is genuine, so a brand order means nothing there.
@@ -444,6 +473,23 @@ export async function updateQuotation(number, { lines: wanted, service = null } 
   });
 }
 
+// ---------------------------------------------------------------- customer
+
+/** Replace a quotation's customer details (the prices are not touched). */
+export async function updateCustomer(number, customer) {
+  const existing = await quotations.get(number);
+  if (!existing) throw new GsfError(`Quotation ${number} not found.`);
+  return quotations.put({ ...existing, customer: cleanCustomer(customer), updatedAt: new Date().toISOString() });
+}
+
+/** Record that the PDF was emailed, and to whom. */
+export async function markEmailed(number, to) {
+  const existing = await quotations.get(number);
+  if (!existing) throw new GsfError(`Quotation ${number} not found.`);
+  const emails = [...(existing.emails ?? []), { to, at: new Date().toISOString() }];
+  return quotations.put({ ...existing, emails });
+}
+
 // ------------------------------------------------------------------ export
 
 /**
@@ -468,7 +514,8 @@ export async function exportForReview({ includeCost = false } = {}) {
 
 function withoutCost(quotation) {
   const { tradeCost, rrp, markupPercent, ...totals } = quotation.totals ?? {};
-  const { markupPercent: rate, ...rest } = quotation;
+  // The review build is shared, so no customer's name, address or email.
+  const { markupPercent: rate, customer, emails, ...rest } = quotation;
 
   return {
     ...rest,

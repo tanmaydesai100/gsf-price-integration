@@ -197,6 +197,22 @@
                        line-height: 1; padding: 0 2px; cursor: pointer; }
   .err { font-size: 13px; color: var(--bad); border-left: 3px solid var(--bad); padding-left: 9px; }
 
+  /* Customer details - all optional; the email is where the PDF goes */
+  .cust { border: 1px solid var(--line); border-radius: 3px; padding: 10px; background: var(--ground); }
+  .cust-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .cust-grid .wide { grid-column: 1 / -1; }
+  .cust-grid label { font-size: 11px; margin-bottom: 3px; }
+  .cust-grid input { padding: 6px 8px; font-size: 13px; }
+  @media (max-width: 700px) { .cust-grid { grid-template-columns: 1fr; } }
+  .opt-in { font-weight: 400; color: var(--faint); text-transform: none; letter-spacing: 0; }
+  .docbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px;
+            border-top: 1px solid var(--line); }
+  .docbar a.ghost { display: inline-block; text-decoration: none; font-family: var(--display);
+                    font-size: 13px; font-weight: 600; padding: 9px 14px; border: 1px solid var(--line); border-radius: 3px; }
+  .docbar input { width: 240px; max-width: 100%; }
+  .custview { font-size: 13px; line-height: 1.45; }
+  .ok { font-size: 13px; color: var(--good); }
+
   /* JLR jobs: a fixed list, the same for every vehicle */
   .jobs { display: flex; flex-wrap: wrap; gap: 6px; }
   .jobs button { background: var(--ground); color: var(--ink); border-color: var(--line);
@@ -673,6 +689,44 @@
       </div>`;
   }
 
+  // ---------------------------------------------------------- customer
+
+  var CUSTOMER_FIELDS = [
+    ['name', 'Name', 'Mr Sunny Singh', 'wide'],
+    ['email', 'Email — the PDF is sent here', 'name@example.com', 'wide'],
+    ['phone', 'Phone', '07…'],
+    ['accountNumber', 'Account no.', 'AAG-1'],
+    ['address1', 'Address line 1', '67 Cuxton Road', 'wide'],
+    ['address2', 'Address line 2', '', 'wide'],
+    ['town', 'Town', 'Rochester'],
+    ['county', 'County', 'Kent'],
+    ['postcode', 'Postcode', 'ME2 2BZ']
+  ];
+
+  var looksLikeEmail = function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim()); };
+  var badEmail = function (c) { return Boolean(c && c.email && c.email.trim() && !looksLikeEmail(c.email)); };
+
+  function CustomerFields(props) {
+    var value = props.value || {};
+    return h`
+      <div class="cust-grid">
+        ${CUSTOMER_FIELDS.map(function (f) {
+          var id = (props.idPrefix || 'cust') + '-' + f[0];
+          return h`<div class=${f[3] || ''} key=${f[0]}>
+            <label for=${id}>${f[1]}</label>
+            <input id=${id} type=${f[0] === 'email' ? 'email' : 'text'} value=${value[f[0]] || ''} placeholder=${f[2]}
+                   autocomplete="off"
+                   onInput=${function (ev) {
+                     var next = Object.assign({}, value);
+                     next[f[0]] = ev.target.value;
+                     props.onChange(next);
+                   }} />
+          </div>`;
+        })}
+      </div>
+      ${badEmail(value) && h`<p class="err" style=${{ marginTop: '7px' }}>That email address doesn’t look right.</p>`}`;
+  }
+
   // -------------------------------------------------------------- form
 
   function CreateForm(props) {
@@ -682,6 +736,7 @@
     var s = useState([]), services = s[0], setServices = s[1];
     var sp = useState('gsf'), supplier = sp[0], setSupplier = sp[1];
     var b = useState(false), busy = b[0], setBusy = b[1];
+    var cu = useState({}), customer = cu[0], setCustomer = cu[1];
 
     // Picked lines belong to one supplier, so switching starts the list again.
     function chooseSupplier(next) {
@@ -704,6 +759,7 @@
           registration: reg,
           date: date,
           supplier: supplier,
+          customer: customer,
           services: services.map(function (c) { return { category: c.category, group: c.group }; })
         })
       })
@@ -712,6 +768,7 @@
           if (!out.res.ok) throw new Error(out.body.message || 'Could not build the quotation.');
           setServices([]);
           setReg('');
+          setCustomer({});
           props.onCreated(out.body);
         })
         .catch(function (err) { setError(err.message); })
@@ -724,6 +781,7 @@
     if (!reg.trim()) missing = 'Enter a registration to continue.';
     else if (!date) missing = 'Pick a date to continue.';
     else if (services.length === 0) missing = 'Add at least one service to continue.';
+    else if (badEmail(customer)) missing = 'Fix the customer’s email, or leave it blank.';
 
     var ready = !missing && !busy;
 
@@ -753,6 +811,11 @@
               <input id="quote-date" type="date" value=${date}
                      onInput=${function (ev) { setDate(ev.target.value); }} />
             </div>
+          </div>
+
+          <div>
+            <label>Customer details <span class="opt-in">— optional</span></label>
+            <div class="cust"><${CustomerFields} value=${customer} onChange=${setCustomer} idPrefix="new" /></div>
           </div>
 
           <${ServicePicker} chosen=${services} onChange=${setServices} registration=${reg} supplier=${supplier} />
@@ -875,6 +938,63 @@
     var bs = useState(false), saving = bs[0], setSaving = bs[1];
     var es = useState(null), error = es[0], setError = es[1];
     var as = useState(false), adding = as[0], setAdding = as[1];
+
+    // The customer's PDF, and emailing it.
+    var ec = useState(false), editingCustomer = ec[0], setEditingCustomer = ec[1];
+    var dc = useState({}), draftCustomer = dc[0], setDraftCustomer = dc[1];
+    var mt = useState(''), mailTo = mt[0], setMailTo = mt[1];
+    var mb = useState(false), mailing = mb[0], setMailing = mb[1];
+    var mm = useState(null), mailMsg = mm[0], setMailMsg = mm[1];
+    var mr = useState(null), mailOk = mr[0], setMailOk = mr[1];
+
+    useEffect(function () {
+      if (REVIEW) return;
+      fetch('/api/mail').then(function (r) { return r.json(); })
+        .then(function (b) { setMailOk(Boolean(b.ready)); })
+        .catch(function () { setMailOk(false); });
+    }, []);
+
+    useEffect(function () {
+      setMailTo((q && q.customer && q.customer.email) || '');
+      setMailMsg(null);
+      setEditingCustomer(false);
+    }, [q && q.number, q && q.customer && q.customer.email]);
+
+    function saveCustomer() {
+      setSaving(true);
+      setError(null);
+      fetch('/api/quotations/' + encodeURIComponent(q.number), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer: draftCustomer })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'Could not save the customer.');
+          setEditingCustomer(false);
+          props.onChanged(out.body);
+        })
+        .catch(function (err) { setError(err.message); })
+        .finally(function () { setSaving(false); });
+    }
+
+    function emailPdf() {
+      setMailing(true);
+      setMailMsg(null);
+      fetch('/api/quotations/' + encodeURIComponent(q.number) + '/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: mailTo })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (out) {
+          if (!out.ok) throw new Error(out.body.message || 'The email could not be sent.');
+          setMailMsg({ ok: true, text: 'Sent to ' + out.body.sentTo + '.' });
+          props.onChanged(out.body.quotation);
+        })
+        .catch(function (err) { setMailMsg({ ok: false, text: err.message }); })
+        .finally(function () { setMailing(false); });
+    }
 
     // Chris's copy is a record of what was quoted, so it is never editable.
     var editable = !REVIEW && Boolean(q);
@@ -1015,6 +1135,42 @@
                 <button type="button" class="ghost" style=${{ marginTop: '8px' }}
                         onClick=${function () { setAdding(false); }}>Cancel</button>
               </div>`}
+          </div>`}
+
+        ${!REVIEW && h`
+          <div class="docbar">
+            <div class="custview" style=${{ flex: '1 1 260px' }}>
+              <b>Customer</b>${' '}
+              ${q.customer
+                ? h`<span>${[q.customer.name, q.customer.email, q.customer.phone,
+                             [q.customer.address1, q.customer.address2, q.customer.town, q.customer.county, q.customer.postcode]
+                               .filter(Boolean).join(', ')].filter(Boolean).join(' · ')}</span>`
+                : h`<span class="hint">not given</span>`}
+              ${!editingCustomer && h` <button type="button" class="ghost" style=${{ padding: '3px 8px', marginLeft: '6px' }}
+                      onClick=${function () { setDraftCustomer(q.customer || {}); setEditingCustomer(true); }}>Edit</button>`}
+            </div>
+            ${editingCustomer && h`
+              <div style=${{ width: '100%' }}>
+                <div class="cust"><${CustomerFields} value=${draftCustomer} onChange=${setDraftCustomer} idPrefix="edit" /></div>
+                <div style=${{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  <button type="button" class="primary" disabled=${saving || badEmail(draftCustomer)} onClick=${saveCustomer}>Save customer</button>
+                  <button type="button" class="ghost" onClick=${function () { setEditingCustomer(false); }}>Cancel</button>
+                </div>
+              </div>`}
+          </div>
+          <div class="docbar">
+            <a class="ghost" href=${'/api/quotations/' + encodeURIComponent(q.number) + '/pdf'} target="_blank" rel="noopener">View PDF</a>
+            <a class="ghost" href=${'/api/quotations/' + encodeURIComponent(q.number) + '/pdf?download=1'}>Download PDF</a>
+            <input type="email" placeholder="customer@example.com" value=${mailTo} aria-label="Send the PDF to"
+                   onInput=${function (ev) { setMailTo(ev.target.value); }} />
+            <button type="button" class="primary" disabled=${mailing || !looksLikeEmail(mailTo) || mailOk === false}
+                    onClick=${emailPdf}>
+              ${mailing ? h`<span><span class="spinner"></span>Sending…</span>` : 'Email PDF'}
+            </button>
+            ${mailOk === false && h`<span class="hint">Email isn’t set up on this server yet (SMTP settings in .env).</span>`}
+            ${mailMsg && h`<span class=${mailMsg.ok ? 'ok' : 'err'}>${mailMsg.text}</span>`}
+            ${!mailMsg && q.emails && q.emails.length > 0 && h`<span class="hint">
+              Last sent to ${q.emails[q.emails.length - 1].to}, ${new Date(q.emails[q.emails.length - 1].at).toLocaleString('en-GB')}</span>`}
           </div>`}
 
         <p class="foot">

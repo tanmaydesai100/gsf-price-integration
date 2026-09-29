@@ -25,11 +25,16 @@ import { JlrClient } from '../jlr/src/client.js';
 import { config as jlrConfig } from '../jlr/src/config.js';
 import { JlrAuthError, JlrError, JlrUpstreamError } from '../jlr/src/errors.js';
 import { JlrPriceService } from '../jlr/src/priceService.js';
+import { MailNotConfiguredError, mailReady, sendQuotation } from '../src/mailer.js';
+import { quotationPdf } from '../src/quotePdf.js';
 import {
   createQuotation,
   DEFAULT_BRAND_PRIORITY,
   quotations,
   sellPrice,
+  isEmail,
+  markEmailed,
+  updateCustomer,
   updateQuotation,
 } from '../src/quotations.js';
 
@@ -242,7 +247,7 @@ app.get('/api/quotations/:number', async (req, res, next) => {
 });
 
 app.post('/api/quotations', async (req, res, next) => {
-  const { registration, date, services, brands } = req.body ?? {};
+  const { registration, date, services, brands, customer } = req.body ?? {};
 
   try {
     const supplier = supplierOf(req.body?.supplier);
@@ -257,6 +262,7 @@ app.post('/api/quotations', async (req, res, next) => {
       service: SUPPLIERS[supplier].prices,
       supplier,
       markupPercent: SUPPLIERS[supplier].markupPercent,
+      customer,
     });
 
     res.status(201).json(quotation);
@@ -273,9 +279,61 @@ app.patch('/api/quotations/:number', async (req, res, next) => {
   try {
     const existing = await quotations.get(req.params.number);
     const supplier = SUPPLIERS[existing?.supplier ?? 'gsf'] ?? SUPPLIERS.gsf;
-    res.json(
-      await updateQuotation(req.params.number, { lines: req.body?.lines, service: supplier.prices }),
-    );
+    const { lines, customer } = req.body ?? {};
+
+    // Customer details can change on their own - the prices are left alone.
+    let updated = existing;
+    if (customer !== undefined) updated = await updateCustomer(req.params.number, customer);
+    if (lines !== undefined || customer === undefined) {
+      updated = await updateQuotation(req.params.number, { lines, service: supplier.prices });
+    }
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** The customer's copy, as a PDF: sell prices and VAT, never trade cost. */
+app.get('/api/quotations/:number/pdf', async (req, res, next) => {
+  try {
+    const found = await quotations.get(req.params.number);
+    if (!found) return res.status(404).json({ error: 'not_found' });
+    const pdf = await quotationPdf(found);
+    res
+      .type('application/pdf')
+      .set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="Quotation-${found.number}.pdf"`)
+      .send(pdf);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Whether the server can send email - the page says so before anyone tries. */
+app.get('/api/mail', (_req, res) => {
+  res.json({ ready: mailReady() });
+});
+
+/**
+ * Email the PDF. To the address given, or the customer's email on the
+ * quotation. Each send is recorded on the quotation.
+ */
+app.post('/api/quotations/:number/email', async (req, res, next) => {
+  try {
+    const found = await quotations.get(req.params.number);
+    if (!found) return res.status(404).json({ error: 'not_found' });
+
+    const to = String(req.body?.to ?? found.customer?.email ?? '').trim();
+    if (!to) return res.status(422).json({ error: 'validation_failed', message: 'No email address - add the customer’s email first.' });
+    if (!isEmail(to)) return res.status(422).json({ error: 'validation_failed', message: `"${to}" is not a valid email address.` });
+
+    try {
+      await sendQuotation({ quotation: found, pdf: await quotationPdf(found), to });
+    } catch (error) {
+      if (error instanceof MailNotConfiguredError) throw error;
+      return res.status(502).json({ error: 'mail_failed', message: `The email could not be sent: ${error.message}` });
+    }
+
+    res.json({ sentTo: to, quotation: await markEmailed(found.number, to) });
   } catch (error) {
     next(error);
   }
@@ -301,6 +359,9 @@ app.use((error, _req, res, _next) => {
   }
   if (error instanceof GsfAuthError) {
     return res.status(503).json({ error: 'supplier_auth', message: error.message });
+  }
+  if (error instanceof MailNotConfiguredError) {
+    return res.status(503).json({ error: 'mail_not_configured', message: error.message });
   }
   if (error instanceof GsfError) {
     return res.status(400).json({ error: 'gsf_error', message: error.message });

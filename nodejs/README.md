@@ -211,6 +211,36 @@ app.use('/api/gsf', requireAuth, rateLimit({ windowMs: 60_000, max: 30 }), gsfRo
 
 Needs `express` installed; it is not a dependency of this package.
 
+## Customer PDF and email
+
+On the new-quotation form, **Customer details** are all optional: name, email,
+phone, account no., address. They can be added or changed later from the
+quotation (**Edit**).
+
+On a quotation, **View PDF** and **Download PDF** give the customer's copy in
+the Auto Assist Group layout ([src/quotePdf.js](src/quotePdf.js)). The header
+([assets/quote-header.png](assets/quote-header.png)) and the footer (address,
+VAT and company numbers) are fixed. The rest comes from the quotation: the
+customer, the quotation number, date, make, model and registration, and each
+priced line with net, 20% VAT and total. Trade cost never appears, and lines
+that could not be priced are left out.
+
+**Email PDF** sends it as an attachment to the customer's email, or to any
+address typed in, from the company's Microsoft 365 mailbox ([src/mailer.js](src/mailer.js)). It
+stays disabled until one way to send is set in `.env` (see `.env.example`):
+
+- **Microsoft Graph** (preferred): `MS_TENANT_ID`, `MS_CLIENT_ID`,
+  `MS_CLIENT_SECRET`, and `MAIL_FROM` for the mailbox it sends as. The app
+  registration needs the `Mail.Send` application permission. A copy is kept in
+  that mailbox's Sent Items.
+- **SMTP**: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`.
+  Microsoft 365 turns SMTP AUTH off by default ("SmtpClientAuthentication is
+  disabled for the Tenant").
+
+`MAIL_BCC` is optional for either. Each send is recorded on the quotation.
+
+Customer details are left out of the shared review export (`bin/quote.js`).
+
 ## Tests
 
 ```bash

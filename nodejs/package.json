@@ -25,6 +25,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "got": "^14.4.5",
+    "nodemailer": "^6.10.1",
+    "pdfkit": "^0.15.2",
     "tough-cookie": "^5.1.0"
   },
   "optionalDependencies": {
